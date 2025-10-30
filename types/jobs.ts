@@ -53,4 +53,5 @@ export type Job = {
   salaryMax: number | null;
   salaryCurrency: string | null;
   tags: string[];
+  posterId: string;
 };

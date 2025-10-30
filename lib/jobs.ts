@@ -107,7 +107,7 @@ function transformJobRecord(record: JobRecord): Job {
   const postedOn =
     record.job_status === "published"
       ? formatPublishedLabel(record.published_at ?? record.created_at)
-      : FALLBACK_POSTED_LABELS[record.job_status] ?? "Published";
+      : (FALLBACK_POSTED_LABELS[record.job_status] ?? "Published");
 
   return {
     id: record.id,
@@ -133,6 +133,7 @@ function transformJobRecord(record: JobRecord): Job {
     salaryMax: record.salary_max,
     salaryCurrency: record.salary_currency,
     tags: toArray(record.tags),
+    posterId: record.poster_id,
   };
 }
 

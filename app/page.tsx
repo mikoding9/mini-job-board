@@ -1,8 +1,9 @@
 "use client";
 
 import NextLink from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import { useAtomValue } from "jotai";
 import type { Selection } from "@react-types/shared";
 import {
   Button,
@@ -10,6 +11,7 @@ import {
   CardBody,
   CardFooter,
   CardHeader,
+  Checkbox,
   Chip,
   Link,
   Navbar,
@@ -20,6 +22,8 @@ import {
   SelectItem,
 } from "@heroui/react";
 import { fetchPublishedJobs } from "@/lib/jobs";
+import { supabaseClient } from "@/lib/supabase-client";
+import { authStateAtom } from "@/atoms/auth";
 import type { Job } from "@/types/jobs";
 
 const toSelectedKeys = (value: string): Selection => new Set([value]);
@@ -32,12 +36,15 @@ const getValueFromSelection = (keys: Selection): string => {
 };
 
 export default function Home() {
+  const authState = useAtomValue(authStateAtom);
   const [locationKeys, setLocationKeys] = useState<Selection>(
     toSelectedKeys("all"),
   );
   const [jobTypeKeys, setJobTypeKeys] = useState<Selection>(
     toSelectedKeys("all"),
   );
+  const [showMineOnly, setShowMineOnly] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const selectedLocation = useMemo(
     () => getValueFromSelection(locationKeys),
@@ -56,41 +63,76 @@ export default function Home() {
     revalidateOnFocus: false,
   });
 
-  const jobLocations = useMemo(() => {
+  const isAuthenticated = Boolean(authState.user);
+  const currentUserId = authState.user?.id ?? null;
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setShowMineOnly(false);
+    }
+  }, [isAuthenticated]);
+
+  const handleSignOut = useCallback(async () => {
+    setIsSigningOut(true);
+    try {
+      await supabaseClient.auth.signOut();
+    } catch (error) {
+      console.error("Failed to sign out", error);
+    } finally {
+      setIsSigningOut(false);
+    }
+  }, []);
+
+  const scopedJobs = useMemo(() => {
     if (!jobs) {
       return [];
     }
-    return Array.from(new Set(jobs.map((job) => job.location))).sort();
-  }, [jobs]);
+    if (showMineOnly && currentUserId) {
+      return jobs.filter((job) => job.posterId === currentUserId);
+    }
+    return jobs;
+  }, [jobs, showMineOnly, currentUserId]);
+
+  const jobLocations = useMemo(() => {
+    if (scopedJobs.length === 0) {
+      return [];
+    }
+    return Array.from(new Set(scopedJobs.map((job) => job.location))).sort();
+  }, [scopedJobs]);
 
   const jobTypes = useMemo(() => {
-    if (!jobs) {
+    if (scopedJobs.length === 0) {
       return [];
     }
-    return Array.from(new Set(jobs.map((job) => job.jobType))).sort();
-  }, [jobs]);
+    return Array.from(new Set(scopedJobs.map((job) => job.jobType))).sort();
+  }, [scopedJobs]);
 
   const filteredJobs = useMemo(() => {
-    if (!jobs) {
+    if (scopedJobs.length === 0) {
       return [];
     }
 
-    return jobs.filter((job) => {
+    return scopedJobs.filter((job) => {
       const matchesLocation =
         selectedLocation === "all" || job.location === selectedLocation;
       const matchesJobType =
         selectedJobType === "all" || job.jobType === selectedJobType;
       return matchesLocation && matchesJobType;
     });
-  }, [jobs, selectedJobType, selectedLocation]);
+  }, [scopedJobs, selectedJobType, selectedLocation]);
 
-  const openRolesCount = jobs ? filteredJobs.length : 0;
+  const openRolesCount = filteredJobs.length;
   const showEmptyState =
     !isLoading && !error && jobs && filteredJobs.length === 0;
+  const emptyStateMessage =
+    showMineOnly && isAuthenticated
+      ? "You haven't published any listings yet. Post your first role to see it here."
+      : "No roles match your filters right now. Adjust filters or add a fresh posting to reach new candidates.";
 
   const resetFilters = () => {
     setLocationKeys(toSelectedKeys("all"));
     setJobTypeKeys(toSelectedKeys("all"));
+    setShowMineOnly(false);
   };
 
   return (
@@ -100,16 +142,38 @@ export default function Home() {
           Mini Job Board
         </NavbarBrand>
         <NavbarContent justify="end" className="gap-3">
-          <NavbarItem>
-            <Button as={NextLink} href="/sign-in" variant="light">
-              Sign in
-            </Button>
-          </NavbarItem>
-          <NavbarItem>
-            <Button as={NextLink} href="/sign-up" color="primary">
-              Create account
-            </Button>
-          </NavbarItem>
+          {isAuthenticated ? (
+            <>
+              <NavbarItem>
+                <Button as={NextLink} href="/sign-up" color="primary">
+                  Post a role
+                </Button>
+              </NavbarItem>
+              <NavbarItem>
+                <Button
+                  variant="light"
+                  onPress={handleSignOut}
+                  isDisabled={isSigningOut}
+                  isLoading={isSigningOut}
+                >
+                  Sign out
+                </Button>
+              </NavbarItem>
+            </>
+          ) : (
+            <>
+              <NavbarItem>
+                <Button as={NextLink} href="/sign-in" variant="light">
+                  Sign in
+                </Button>
+              </NavbarItem>
+              <NavbarItem>
+                <Button as={NextLink} href="/sign-up" color="primary">
+                  Create account
+                </Button>
+              </NavbarItem>
+            </>
+          )}
         </NavbarContent>
       </Navbar>
 
@@ -149,7 +213,19 @@ export default function Home() {
               </Button>
             )}
           </CardHeader>
-          <CardBody>
+          <CardBody className="space-y-4">
+            {isAuthenticated && (
+              <div className="flex justify-between">
+                <Checkbox
+                  size="sm"
+                  className="text-sm text-zinc-600 dark:text-zinc-300"
+                  isSelected={showMineOnly}
+                  onValueChange={setShowMineOnly}
+                >
+                  Show only my listings
+                </Checkbox>
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <Select
                 label="Location"
@@ -221,8 +297,7 @@ export default function Home() {
             {showEmptyState && (
               <Card className="border border-dashed border-zinc-300 bg-white/80 dark:border-zinc-700 dark:bg-zinc-900/80">
                 <CardBody className="items-center text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  No roles match your filters right now. Adjust filters or add a
-                  fresh posting to reach new candidates.
+                  {emptyStateMessage}
                 </CardBody>
               </Card>
             )}
@@ -258,14 +333,16 @@ export default function Home() {
                   </p>
                 </CardBody>
                 <CardFooter className="flex flex-wrap gap-3">
-                  <Button
-                    as={NextLink}
-                    href="/sign-in"
-                    variant="light"
-                    size="sm"
-                  >
-                    Manage listing
-                  </Button>
+                  {isAuthenticated && job.posterId === currentUserId && (
+                    <Button
+                      as={NextLink}
+                      href={`/jobs/${job.slug}/edit`}
+                      variant="light"
+                      size="sm"
+                    >
+                      Edit listing
+                    </Button>
+                  )}
                   <Button
                     as={NextLink}
                     href={`/jobs/${job.slug}`}
