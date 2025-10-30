@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import JobEditClient from "@/components/JobEditClient";
+import JobEditorClient from "@/components/JobEditorClient";
 import { fetchJobBySlugForOwner } from "@/lib/jobs";
 
 type EditJobPageProps = {
@@ -17,5 +17,5 @@ export default async function EditJobPage({ params }: EditJobPageProps) {
     notFound();
   }
 
-  return <JobEditClient slug={slug} initialJob={job} />;
+  return <JobEditorClient mode="edit" slug={slug} initialJob={job} />;
 }

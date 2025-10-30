@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import NextLink from "next/link";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { useAtomValue } from "jotai";
 import type { Selection } from "@react-types/shared";
@@ -22,7 +21,13 @@ import {
 } from "@heroui/react";
 import type { Job, JobStatus, JobType } from "@/types/jobs";
 import { authStateAtom } from "@/atoms/auth";
-import { deleteJob, type UpdateJobInput, updateJob } from "@/lib/job-mutations";
+import {
+  createJob,
+  deleteJob,
+  type UpdateJobInput,
+  type CreateJobInput,
+  updateJob,
+} from "@/lib/job-mutations";
 import { fetchJobBySlugForOwner } from "@/lib/jobs";
 
 const JOB_TYPE_OPTIONS: JobType[] = ["Full-Time", "Part-Time", "Contract"];
@@ -44,6 +49,14 @@ const multilineToArray = (value: string) =>
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
+const csvToArray = (value: string) =>
+  value
+    .split(/[,|\n]/)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+const arrayToCsv = (items: string[]) => items.join(", ");
+
 const toDateTimeLocal = (iso: string | null) => {
   if (!iso) return "";
   const date = new Date(iso);
@@ -59,28 +72,35 @@ const toDateTimeLocal = (iso: string | null) => {
 const fromDateTimeLocal = (value: string) =>
   value ? new Date(value).toISOString() : null;
 
-type JobEditClientProps = {
-  slug: string;
+type JobEditorClientProps = {
+  mode: "create" | "edit";
+  slug?: string;
   initialJob: Job | null;
 };
 
-export default function JobEditClient({ slug, initialJob }: JobEditClientProps) {
+export default function JobEditorClient({
+  mode,
+  slug,
+  initialJob,
+}: JobEditorClientProps) {
   const router = useRouter();
   const authState = useAtomValue(authStateAtom);
   const isAuthenticated = Boolean(authState.user);
   const currentUserId = authState.user?.id ?? null;
+  const isEditing = mode === "edit";
 
+  const shouldFetch = isEditing && slug;
   const {
     data: job,
     error,
     isLoading,
     mutate,
   } = useSWR<Job | null>(
-    slug ? ["job-owner", slug] : null,
-    async () => fetchJobBySlugForOwner(slug),
+    shouldFetch ? ["job-owner", slug] : null,
+    async () => fetchJobBySlugForOwner(slug!),
     {
       revalidateOnFocus: false,
-      fallbackData: initialJob,
+      fallbackData: isEditing ? initialJob : null,
     },
   );
 
@@ -112,16 +132,20 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [initialized, setInitialized] = useState(mode === "create");
 
   const isOwner = useMemo(() => {
+    if (!isEditing) {
+      return true;
+    }
     if (!job || !currentUserId) {
       return false;
     }
     return job.posterId === currentUserId;
-  }, [job, currentUserId]);
+  }, [isEditing, job, currentUserId]);
 
   useEffect(() => {
-    if (job) {
+    if (isEditing && job && !initialized) {
       setTitle(job.title);
       setCompanyName(job.companyName);
       setLocation(job.location);
@@ -138,51 +162,36 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
       setSalaryMin(job.salaryMin?.toString() ?? "");
       setSalaryMax(job.salaryMax?.toString() ?? "");
       setSalaryCurrency(job.salaryCurrency ?? "");
-      setTagsText(job.tags.join(", "));
+      setTagsText(arrayToCsv(job.tags));
       setPublishedAtValue(toDateTimeLocal(job.publishedAt));
+      setInitialized(true);
     }
-  }, [job]);
+  }, [isEditing, job, initialized]);
 
   useEffect(() => {
-    if (!isLoading && !job && (error || !isAuthenticated)) {
+    if (isEditing && !isLoading && !job && (error || !isAuthenticated)) {
       setFormError(
         error?.message ??
           "We couldn't find that job or you don't have permission to edit it.",
       );
     }
-  }, [job, error, isLoading, isAuthenticated]);
+  }, [isEditing, job, error, isLoading, isAuthenticated]);
 
-  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!job) return;
-
-    if (!isAuthenticated) {
-      setFormError("Please sign in to manage your listings.");
-      return;
-    }
-
-    if (!isOwner) {
-      setFormError("You do not have permission to edit this listing.");
-      return;
-    }
-
-    setFormError(null);
-    setFormSuccess(null);
-    setIsSaving(true);
-
+  const buildPayload = (): UpdateJobInput => {
     const jobType = getValueFromSelection(jobTypeKeys) as JobType;
     const jobStatus = getValueFromSelection(jobStatusKeys) as JobStatus;
+    const previousPublishedAt = isEditing ? job?.publishedAt ?? null : null;
 
     const resolvedPublishedAt =
       jobStatus === "published"
         ? publishImmediately
           ? new Date().toISOString()
           : fromDateTimeLocal(publishedAtValue) ??
-            job.publishedAt ??
+            previousPublishedAt ??
             new Date().toISOString()
         : null;
 
-    const updatePayload: UpdateJobInput = {
+    return {
       title: title.trim(),
       companyName: companyName.trim(),
       location: location.trim(),
@@ -199,25 +208,58 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
       salaryMin: salaryMin ? Number(salaryMin) : null,
       salaryMax: salaryMax ? Number(salaryMax) : null,
       salaryCurrency: salaryCurrency.trim() || null,
-      tags: multilineToArray(tagsText.replace(/,/g, "\n")),
+      tags: csvToArray(tagsText),
       publishedAt: resolvedPublishedAt,
     };
+  };
+
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFormError(null);
+    setFormSuccess(null);
+
+    if (!isAuthenticated) {
+      setFormError("Please sign in to manage your listings.");
+      return;
+    }
+
+    setIsSaving(true);
+
+    const payload = buildPayload();
 
     try {
-      const updatedJob = await updateJob(job.id, updatePayload);
-      await mutate(updatedJob, { revalidate: true });
-      setFormSuccess("Listing updated successfully.");
-      setPublishImmediately(false);
-      if (updatedJob.jobStatus === "published") {
-        setPublishedAtValue(toDateTimeLocal(updatedJob.publishedAt));
+      if (isEditing) {
+        if (!job || !isOwner) {
+          throw new Error("You do not have permission to edit this listing.");
+        }
+        const updatedJob = await updateJob(job.id, payload);
+        await mutate(updatedJob, { revalidate: true });
+        setFormSuccess("Listing updated successfully.");
+        setPublishImmediately(false);
+        if (updatedJob.jobStatus === "published") {
+          setPublishedAtValue(toDateTimeLocal(updatedJob.publishedAt));
+        } else {
+          setPublishedAtValue("");
+        }
       } else {
-        setPublishedAtValue("");
+        if (!currentUserId) {
+          throw new Error("Unable to determine your user account.");
+        }
+        const createPayload: CreateJobInput = {
+          ...payload,
+          posterId: currentUserId,
+        };
+        const createdJob = await createJob(createPayload);
+        setFormSuccess("Listing created. Redirecting to edit view…");
+        setTimeout(() => {
+          router.replace(`/jobs/${createdJob.slug}/edit`);
+        }, 600);
       }
-    } catch (updateError) {
+    } catch (submissionError) {
       setFormError(
-        updateError instanceof Error
-          ? updateError.message
-          : "Failed to update job. Please try again.",
+        submissionError instanceof Error
+          ? submissionError.message
+          : "Failed to save listing. Please try again.",
       );
     } finally {
       setIsSaving(false);
@@ -225,7 +267,7 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
   };
 
   const handleDelete = useCallback(async () => {
-    if (!job) return;
+    if (!isEditing || !job) return;
     const confirmed = window.confirm(
       "Are you sure you want to delete this listing? This action cannot be undone.",
     );
@@ -251,7 +293,7 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
       );
       setIsDeleting(false);
     }
-  }, [job, router]);
+  }, [isEditing, job, router]);
 
   if (!isAuthenticated && !authState.loading) {
     return (
@@ -273,7 +315,7 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
     );
   }
 
-  if (isLoading) {
+  if (isEditing && isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 px-6 py-16 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
         <Card className="w-full max-w-lg border border-zinc-200 bg-white/90 p-6 shadow-lg backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90">
@@ -290,7 +332,7 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
     );
   }
 
-  if (!job || !isOwner) {
+  if (isEditing && (!job || !isOwner)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 px-6 py-16 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
         <Card className="w-full max-w-lg border border-zinc-200 bg-white/90 p-6 shadow-lg backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90">
@@ -313,6 +355,13 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
     );
   }
 
+  const pageTitle =
+    mode === "edit" ? "Edit job listing" : "Create a new job listing";
+  const pageSubtitle =
+    mode === "edit"
+      ? "Edit details, adjust visibility, or remove this role entirely."
+      : "Publish a new opportunity to reach engaged candidates.";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 pb-16 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
       <div className="mx-auto flex max-w-4xl flex-col gap-8 px-6 pt-12">
@@ -320,32 +369,34 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
           <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-                Edit job listing
+                {pageTitle}
               </h1>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Edit details, adjust visibility, or remove this role entirely.
+                {pageSubtitle}
               </p>
             </div>
-            <div className="flex gap-3">
-              <Button
-                as={NextLink}
-                href={`/jobs/${job.slug}`}
-                variant="flat"
-                size="sm"
-              >
-                View public page
-              </Button>
-              <Button
-                color="danger"
-                variant="ghost"
-                size="sm"
-                onPress={handleDelete}
-                isDisabled={isDeleting}
-                isLoading={isDeleting}
-              >
-                Delete listing
-              </Button>
-            </div>
+            {isEditing && job && (
+              <div className="flex gap-3">
+                <Button
+                  as={NextLink}
+                  href={`/jobs/${job.slug}`}
+                  variant="flat"
+                  size="sm"
+                >
+                  View public page
+                </Button>
+                <Button
+                  color="danger"
+                  variant="ghost"
+                  size="sm"
+                  onPress={handleDelete}
+                  isDisabled={isDeleting}
+                  isLoading={isDeleting}
+                >
+                  Delete listing
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <Divider />
           <CardBody>
@@ -526,7 +577,7 @@ export default function JobEditClient({ slug, initialJob }: JobEditClientProps) 
                   isDisabled={isSaving}
                   isLoading={isSaving}
                 >
-                  Save changes
+                  {mode === "edit" ? "Save changes" : "Create listing"}
                 </Button>
               </CardFooter>
             </form>

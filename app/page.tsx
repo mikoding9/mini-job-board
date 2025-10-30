@@ -145,7 +145,7 @@ export default function Home() {
           {isAuthenticated ? (
             <>
               <NavbarItem>
-                <Button as={NextLink} href="/sign-up" color="primary">
+                <Button as={NextLink} href="/jobs/new" color="primary">
                   Post a role
                 </Button>
               </NavbarItem>
@@ -262,7 +262,7 @@ export default function Home() {
             </h2>
             <Link
               as={NextLink}
-              href="/sign-up"
+              href={isAuthenticated ? "/jobs/new" : "/sign-up"}
               color="primary"
               className="text-sm"
             >
