@@ -101,7 +101,7 @@ function toArray(value: string[] | null | undefined): string[] {
   return Array.isArray(value) ? value : [];
 }
 
-function transformJobRecord(record: JobRecord): Job {
+export function transformJobRecord(record: JobRecord): Job {
   const description = record.description ?? record.overview ?? "";
   const overview = record.overview ?? record.description ?? "";
   const postedOn =
@@ -166,4 +166,19 @@ export async function fetchPublishedJobSlugs(): Promise<string[]> {
   return records
     .map((record) => record.slug)
     .filter((slug): slug is string => typeof slug === "string" && slug.length);
+}
+
+export async function fetchJobBySlugForOwner(
+  slug: string,
+): Promise<Job | null> {
+  if (!slug) {
+    return null;
+  }
+
+  const records = await supabaseFetch<JobRecord[]>(
+    `jobs?slug=eq.${encodeURIComponent(slug)}&select=*&limit=1`,
+  );
+
+  const record = records[0];
+  return record ? transformJobRecord(record) : null;
 }

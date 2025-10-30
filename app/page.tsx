@@ -332,17 +332,7 @@ export default function Home() {
                     {job.postedOn}
                   </p>
                 </CardBody>
-                <CardFooter className="flex flex-wrap gap-3">
-                  {isAuthenticated && job.posterId === currentUserId && (
-                    <Button
-                      as={NextLink}
-                      href={`/jobs/${job.slug}/edit`}
-                      variant="light"
-                      size="sm"
-                    >
-                      Edit listing
-                    </Button>
-                  )}
+                <CardFooter className="flex flex-wrap gap-3 justify-between">
                   <Button
                     as={NextLink}
                     href={`/jobs/${job.slug}`}
@@ -353,6 +343,26 @@ export default function Home() {
                   >
                     View details
                   </Button>
+                  {isAuthenticated && job.posterId === currentUserId && (
+                    <div>
+                      <Button
+                        as={NextLink}
+                        href={`/jobs/${job.slug}/edit`}
+                        variant="light"
+                        size="sm"
+                      >
+                        Edit listing
+                      </Button>
+                      <Button
+                        as={NextLink}
+                        href={`/jobs/${job.slug}/edit`}
+                        variant="light"
+                        size="sm"
+                      >
+                        Remove listing
+                      </Button>
+                    </div>
+                  )}
                 </CardFooter>
               </Card>
             ))}
