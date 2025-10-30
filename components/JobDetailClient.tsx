@@ -15,10 +15,10 @@ import {
   Divider,
   Link,
 } from "@heroui/react";
-import type { JobPosting } from "@/data/job-postings";
+import type { Job } from "@/types/jobs";
 
 type JobDetailClientProps = {
-  job: JobPosting;
+  job: Job;
 };
 
 const getCompanyInitials = (company: string) =>
@@ -31,7 +31,7 @@ const getCompanyInitials = (company: string) =>
     .toUpperCase();
 
 export default function JobDetailClient({ job }: JobDetailClientProps) {
-  const companyInitials = getCompanyInitials(job.company);
+  const companyInitials = getCompanyInitials(job.companyName);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 pb-16 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
@@ -46,14 +46,14 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
             <div className="flex flex-1 flex-col gap-4">
               <div className="flex items-center gap-4">
                 <Avatar
-                  name={job.company}
+                  name={job.companyName}
                   className="h-12 w-12 min-w-12 border border-zinc-200 bg-white text-base font-semibold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200"
                 >
                   {companyInitials}
                 </Avatar>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    {job.company}
+                    {job.companyName}
                   </p>
                   <h1 className="text-3xl font-semibold text-zinc-900 dark:text-zinc-50">
                     {job.title}
@@ -74,7 +74,21 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
               </div>
             </div>
             <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-end">
-              <Button color="primary" className="w-full sm:w-auto">
+              <Button
+                as={
+                  job.applicationUrl || job.applicationEmail ? "a" : undefined
+                }
+                href={
+                  job.applicationUrl ??
+                  (job.applicationEmail
+                    ? `mailto:${job.applicationEmail}`
+                    : undefined)
+                }
+                target={job.applicationUrl ? "_blank" : undefined}
+                rel={job.applicationUrl ? "noopener noreferrer" : undefined}
+                color="primary"
+                className="w-full sm:w-auto"
+              >
                 Apply now
               </Button>
               <Button
@@ -204,7 +218,7 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                   About the company
                 </h2>
                 <Chip variant="flat" size="sm">
-                  {job.company}
+                  {job.companyName}
                 </Chip>
               </CardHeader>
               <CardBody className="space-y-4 text-sm leading-6 text-zinc-600 dark:text-zinc-400">

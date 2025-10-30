@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
-import { JOB_POSTINGS, getJobBySlug } from "@/data/job-postings";
-import JobDetailClient from "../../../components/JobDetailClient";
+import JobDetailClient from "@/components/JobDetailClient";
+import { fetchJobBySlug, fetchPublishedJobSlugs } from "@/lib/jobs";
+
+export const revalidate = 0;
 
 type JobDetailPageProps = {
   params: {
@@ -9,14 +11,17 @@ type JobDetailPageProps = {
 };
 
 export async function generateStaticParams() {
-  return JOB_POSTINGS.map((job) => ({
-    slug: job.slug,
-  }));
+  try {
+    const slugs = await fetchPublishedJobSlugs();
+    return slugs.map((slug) => ({ slug }));
+  } catch {
+    return [];
+  }
 }
 
 export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const { slug } = await params;
-  const job = getJobBySlug(slug);
+  const job = await fetchJobBySlug(slug);
 
   if (!job) {
     notFound();

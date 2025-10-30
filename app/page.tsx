@@ -2,6 +2,7 @@
 
 import NextLink from "next/link";
 import { useMemo, useState } from "react";
+import useSWR from "swr";
 import type { Selection } from "@react-types/shared";
 import {
   Button,
@@ -18,7 +19,8 @@ import {
   Select,
   SelectItem,
 } from "@heroui/react";
-import { JOB_LOCATIONS, JOB_POSTINGS, JOB_TYPES } from "@/data/job-postings";
+import { fetchPublishedJobs } from "@/lib/jobs";
+import type { Job } from "@/types/jobs";
 
 const toSelectedKeys = (value: string): Selection => new Set([value]);
 const getValueFromSelection = (keys: Selection): string => {
@@ -46,15 +48,45 @@ export default function Home() {
     [jobTypeKeys],
   );
 
+  const {
+    data: jobs,
+    error,
+    isLoading,
+  } = useSWR<Job[]>("jobs/published", () => fetchPublishedJobs(), {
+    revalidateOnFocus: false,
+  });
+
+  const jobLocations = useMemo(() => {
+    if (!jobs) {
+      return [];
+    }
+    return Array.from(new Set(jobs.map((job) => job.location))).sort();
+  }, [jobs]);
+
+  const jobTypes = useMemo(() => {
+    if (!jobs) {
+      return [];
+    }
+    return Array.from(new Set(jobs.map((job) => job.jobType))).sort();
+  }, [jobs]);
+
   const filteredJobs = useMemo(() => {
-    return JOB_POSTINGS.filter((job) => {
+    if (!jobs) {
+      return [];
+    }
+
+    return jobs.filter((job) => {
       const matchesLocation =
         selectedLocation === "all" || job.location === selectedLocation;
       const matchesJobType =
         selectedJobType === "all" || job.jobType === selectedJobType;
       return matchesLocation && matchesJobType;
     });
-  }, [selectedJobType, selectedLocation]);
+  }, [jobs, selectedJobType, selectedLocation]);
+
+  const openRolesCount = jobs ? filteredJobs.length : 0;
+  const showEmptyState =
+    !isLoading && !error && jobs && filteredJobs.length === 0;
 
   const resetFilters = () => {
     setLocationKeys(toSelectedKeys("all"));
@@ -127,7 +159,7 @@ export default function Home() {
                 selectionMode="single"
               >
                 <SelectItem key="all">All locations</SelectItem>
-                {JOB_LOCATIONS.map((location) => (
+                {jobLocations.map((location) => (
                   <SelectItem key={location}>{location}</SelectItem>
                 ))}
               </Select>
@@ -139,7 +171,7 @@ export default function Home() {
                 selectionMode="single"
               >
                 <SelectItem key="all">All job types</SelectItem>
-                {JOB_TYPES.map((jobType) => (
+                {jobTypes.map((jobType) => (
                   <SelectItem key={jobType}>{jobType}</SelectItem>
                 ))}
               </Select>
@@ -150,8 +182,7 @@ export default function Home() {
         <section className="space-y-4 pb-10">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              {filteredJobs.length} open{" "}
-              {filteredJobs.length === 1 ? "role" : "roles"}
+              {openRolesCount} open {openRolesCount === 1 ? "role" : "roles"}
             </h2>
             <Link
               as={NextLink}
@@ -164,7 +195,30 @@ export default function Home() {
           </div>
 
           <div className="grid gap-4">
-            {filteredJobs.length === 0 && (
+            {isLoading && (
+              <Card className="border border-zinc-200/70 bg-white/80 dark:border-zinc-800/70 dark:bg-zinc-900/80">
+                <CardBody className="space-y-2 text-sm text-zinc-500 dark:text-zinc-400">
+                  <p className="font-medium text-zinc-700 dark:text-zinc-200">
+                    Loading job listings…
+                  </p>
+                  <p>
+                    We&apos;re fetching the latest published roles so you can
+                    see how candidates experience the board.
+                  </p>
+                </CardBody>
+              </Card>
+            )}
+
+            {error && (
+              <Card className="border border-red-200 bg-red-50/70 dark:border-red-800/70 dark:bg-red-950/30">
+                <CardBody className="space-y-2 text-sm text-red-700 dark:text-red-200">
+                  <p className="font-medium">We couldn&apos;t load listings.</p>
+                  <p>Refresh the page or check your Supabase credentials.</p>
+                </CardBody>
+              </Card>
+            )}
+
+            {showEmptyState && (
               <Card className="border border-dashed border-zinc-300 bg-white/80 dark:border-zinc-700 dark:bg-zinc-900/80">
                 <CardBody className="items-center text-center text-sm text-zinc-500 dark:text-zinc-400">
                   No roles match your filters right now. Adjust filters or add a
@@ -182,7 +236,7 @@ export default function Home() {
                 <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-1">
                     <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                      {job.company}
+                      {job.companyName}
                     </p>
                     <h3 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
                       {job.title}
@@ -199,6 +253,9 @@ export default function Home() {
                   <Chip variant="flat" className="w-max">
                     {job.location}
                   </Chip>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {job.postedOn}
+                  </p>
                 </CardBody>
                 <CardFooter className="flex flex-wrap gap-3">
                   <Button
