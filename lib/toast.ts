@@ -19,7 +19,7 @@ export const showSuccessToast = ({
     title,
     description,
     color: "success",
-    variant: "solid",
+    variant: "flat",
     timeout,
     shouldShowTimeoutProgress: true,
   });
@@ -34,7 +34,7 @@ export const showErrorToast = ({
     title,
     description,
     color: "danger",
-    variant: "solid",
+    variant: "flat",
     timeout,
     shouldShowTimeoutProgress: true,
   });

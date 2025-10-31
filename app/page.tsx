@@ -28,6 +28,21 @@ import {
   ModalHeader,
 } from "@heroui/react";
 import {
+  FiArrowRight,
+  FiBriefcase,
+  FiEdit3,
+  FiFilter,
+  FiLayers,
+  FiLogIn,
+  FiLogOut,
+  FiMapPin,
+  FiPlus,
+  FiTrash2,
+  FiUserCheck,
+  FiUserPlus,
+  FiClock,
+} from "react-icons/fi";
+import {
   fetchPublishedJobFilters,
   fetchPublishedJobsPage,
   type PublishedJobsPageResult,
@@ -77,8 +92,20 @@ export default function Home() {
     [jobTypeKeys],
   );
 
-  const posterIdFilter =
-    showMineOnly && currentUserId ? currentUserId : null;
+  const heroChipLabel = isAuthenticated ? "Built for hiring teams" : "For job seekers";
+  const heroTitle = isAuthenticated
+    ? "Reach engaged candidates faster"
+    : "Discover your next opportunity";
+  const heroSubtitle = isAuthenticated
+    ? "Publish roles in minutes and showcase them to a community of product builders ready to collaborate."
+    : "Browse curated listings from product-minded teams and uncover a role that matches your craft.";
+  const filterHeading = isAuthenticated ? "Preview live listings" : "Tailor your search";
+  const filterDescription = isAuthenticated
+    ? "Filter by location or role type to see how candidates experience the board."
+    : "Fine-tune the board by city or role type to surface the openings that fit you best.";
+  const postLinkLabel = isAuthenticated ? "Post a new role" : "Post a role (free for teams)";
+
+  const posterIdFilter = showMineOnly && currentUserId ? currentUserId : null;
   const locationFilter = selectedLocation === "all" ? null : selectedLocation;
   const jobTypeFilter = selectedJobType === "all" ? null : selectedJobType;
 
@@ -88,7 +115,13 @@ export default function Home() {
     isLoading,
     mutate: mutateJobs,
   } = useSWR<PublishedJobsPageResult>(
-    ["jobs/published", currentPage, locationFilter, jobTypeFilter, posterIdFilter],
+    [
+      "jobs/published",
+      currentPage,
+      locationFilter,
+      jobTypeFilter,
+      posterIdFilter,
+    ],
     ([, page, location, jobType, posterId]) =>
       fetchPublishedJobsPage({
         page,
@@ -113,10 +146,7 @@ export default function Home() {
     setCurrentPage(1);
   }, [selectedLocation, selectedJobType, showMineOnly]);
 
-  const {
-    data: filterOptions,
-    mutate: mutateFilters,
-  } = useSWR(
+  const { data: filterOptions, mutate: mutateFilters } = useSWR(
     ["jobs/published/filters", posterIdFilter],
     ([, posterId]) =>
       fetchPublishedJobFilters({
@@ -229,11 +259,18 @@ export default function Home() {
   const paginatedJobs = jobPage?.jobs ?? [];
 
   const openRolesCount = totalJobs;
+  const openRolesHeading = isAuthenticated
+    ? `${openRolesCount} open ${openRolesCount === 1 ? "role" : "roles"}`
+    : `Explore ${openRolesCount} open ${
+        openRolesCount === 1 ? "role" : "roles"
+      }`;
   const showEmptyState = !isLoading && !error && totalJobs === 0;
   const emptyStateMessage =
     showMineOnly && isAuthenticated
       ? "You haven't published any listings yet. Post your first role to see it here."
-      : "No roles match your filters right now. Adjust filters or add a fresh posting to reach new candidates.";
+      : isAuthenticated
+        ? "No roles match your filters right now. Adjust filters or add a fresh posting to reach new candidates."
+        : "No roles match your filters right now. Adjust filters or check back soon.";
 
   const resetFilters = () => {
     setLocationKeys(toSelectedKeys("all"));
@@ -245,13 +282,24 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 pb-12 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
       <Navbar maxWidth="full" className="mx-auto max-w-5xl bg-transparent px-6">
         <NavbarBrand className="font-semibold text-lg text-zinc-900 dark:text-zinc-100">
-          Mini Job Board
+          <span className="flex items-center gap-2">
+            <FiLayers
+              className="h-5 w-5 text-primary-500 dark:text-primary-400"
+              aria-hidden
+            />
+            Mini Job Board
+          </span>
         </NavbarBrand>
         <NavbarContent justify="end" className="gap-3">
           {isAuthenticated ? (
             <>
               <NavbarItem>
-                <Button as={NextLink} href="/jobs/new" color="primary">
+                <Button
+                  as={NextLink}
+                  href="/jobs/new"
+                  color="primary"
+                  startContent={<FiPlus className="h-4 w-4" aria-hidden />}
+                >
                   Post a role
                 </Button>
               </NavbarItem>
@@ -261,6 +309,7 @@ export default function Home() {
                   onPress={handleSignOut}
                   isDisabled={isSigningOut}
                   isLoading={isSigningOut}
+                  startContent={<FiLogOut className="h-4 w-4" aria-hidden />}
                 >
                   Sign out
                 </Button>
@@ -269,12 +318,22 @@ export default function Home() {
           ) : (
             <>
               <NavbarItem>
-                <Button as={NextLink} href="/sign-in" variant="light">
+                <Button
+                  as={NextLink}
+                  href="/sign-in"
+                  variant="light"
+                  startContent={<FiLogIn className="h-4 w-4" aria-hidden />}
+                >
                   Sign in
                 </Button>
               </NavbarItem>
               <NavbarItem>
-                <Button as={NextLink} href="/sign-up" color="primary">
+                <Button
+                  as={NextLink}
+                  href="/sign-up"
+                  color="primary"
+                  startContent={<FiUserPlus className="h-4 w-4" aria-hidden />}
+                >
                   Create account
                 </Button>
               </NavbarItem>
@@ -290,15 +349,13 @@ export default function Home() {
             variant="flat"
             className="mx-auto w-max md:mx-0"
           >
-            Built for hiring teams
+            {heroChipLabel}
           </Chip>
           <h1 className="text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 md:text-5xl">
-            Reach engaged candidates faster
+            {heroTitle}
           </h1>
           <p className="mx-auto max-w-2xl text-base text-zinc-600 dark:text-zinc-400 md:mx-0">
-            Publish roles in minutes and showcase them to a community of product
-            builders browsing freely. Highlight location and role details so the
-            right applicants can discover you at a glance.
+            {heroSubtitle}
           </p>
         </section>
 
@@ -306,15 +363,25 @@ export default function Home() {
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                Preview live listings
+                <span className="flex items-center gap-2">
+                  <FiFilter
+                    className="h-5 w-5 text-primary-500 dark:text-primary-400"
+                    aria-hidden
+                  />
+                  {filterHeading}
+                </span>
               </h2>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Filter by location or role type to see how candidates experience
-                the board.
+                {filterDescription}
               </p>
             </div>
             {(selectedLocation !== "all" || selectedJobType !== "all") && (
-              <Button size="sm" variant="light" onPress={resetFilters}>
+              <Button
+                size="sm"
+                variant="light"
+                onPress={resetFilters}
+                startContent={<FiFilter className="h-4 w-4" aria-hidden />}
+              >
                 Clear filters
               </Button>
             )}
@@ -328,7 +395,10 @@ export default function Home() {
                   isSelected={showMineOnly}
                   onValueChange={setShowMineOnly}
                 >
-                  Show only my listings
+                  <span className="flex items-center gap-2">
+                    <FiUserCheck className="h-4 w-4" aria-hidden />
+                    Show only my listings
+                  </span>
                 </Checkbox>
               </div>
             )}
@@ -364,15 +434,16 @@ export default function Home() {
         <section className="space-y-4 pb-10">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              {openRolesCount} open {openRolesCount === 1 ? "role" : "roles"}
+              {openRolesHeading}
             </h2>
             <Link
               as={NextLink}
               href={isAuthenticated ? "/jobs/new" : "/sign-up"}
               color="primary"
-              className="text-sm"
+              className="flex items-center gap-2 text-sm"
             >
-              Post a new role
+              <FiPlus className="h-4 w-4" aria-hidden />
+              {postLinkLabel}
             </Link>
           </div>
 
@@ -423,7 +494,13 @@ export default function Home() {
                       {job.title}
                     </h3>
                   </div>
-                  <Chip color="primary" variant="flat">
+                  <Chip
+                    color="primary"
+                    variant="flat"
+                    startContent={
+                      <FiBriefcase className="h-3 w-3 ml-2 mr-1" aria-hidden />
+                    }
+                  >
                     {job.jobType}
                   </Chip>
                 </CardHeader>
@@ -431,10 +508,17 @@ export default function Home() {
                   <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                     {job.description}
                   </p>
-                  <Chip variant="flat" className="w-max">
+                  <Chip
+                    variant="flat"
+                    className="w-max"
+                    startContent={
+                      <FiMapPin className="h-3 w-3 ml-2 mr-1" aria-hidden />
+                    }
+                  >
                     {job.location}
                   </Chip>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    <FiClock className="h-3 w-3" aria-hidden />
                     {job.postedOn}
                   </p>
                 </CardBody>
@@ -445,7 +529,9 @@ export default function Home() {
                     color="primary"
                     variant="flat"
                     size="sm"
-                    endContent={<span aria-hidden="true">→</span>}
+                    endContent={
+                      <FiArrowRight className="h-4 w-4" aria-hidden />
+                    }
                   >
                     View details
                   </Button>
@@ -456,6 +542,9 @@ export default function Home() {
                         href={`/jobs/${job.slug}/edit`}
                         variant="light"
                         size="sm"
+                        startContent={
+                          <FiEdit3 className="h-4 w-4" aria-hidden />
+                        }
                       >
                         Edit listing
                       </Button>
@@ -466,6 +555,9 @@ export default function Home() {
                         onPress={() => requestRemoveListing(job)}
                         isDisabled={deletingJobId === job.id}
                         isLoading={deletingJobId === job.id}
+                        startContent={
+                          <FiTrash2 className="h-4 w-4" aria-hidden />
+                        }
                       >
                         Remove listing
                       </Button>

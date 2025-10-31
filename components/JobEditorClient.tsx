@@ -31,6 +31,12 @@ import {
   ModalFooter,
   ModalHeader,
 } from "@heroui/react";
+import {
+  FiArrowLeft,
+  FiExternalLink,
+  FiSave,
+  FiTrash2,
+} from "react-icons/fi";
 import type { Job, JobStatus, JobType } from "@/types/jobs";
 import { authStateAtom } from "@/atoms/auth";
 import {
@@ -416,8 +422,8 @@ export default function JobEditorClient({
     mode === "edit" ? "Edit job listing" : "Create a new job listing";
   const pageSubtitle =
     mode === "edit"
-      ? "Edit details, adjust visibility, or remove this role entirely."
-      : "Publish a new opportunity to reach engaged candidates.";
+      ? "Keep your posting fresh for job seekers: adjust details, change visibility, or remove it entirely."
+      : "Share a new opportunity with the community. Your listing appears instantly to job seekers once published.";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 pb-16 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
@@ -439,6 +445,7 @@ export default function JobEditorClient({
                   href={`/jobs/${job.slug}`}
                   variant="flat"
                   size="sm"
+                  startContent={<FiExternalLink className="h-4 w-4" aria-hidden />}
                 >
                   View public page
                 </Button>
@@ -449,6 +456,7 @@ export default function JobEditorClient({
                   onPress={handleOpenDeleteDialog}
                   isDisabled={isDeleting}
                   isLoading={isDeleting}
+                  startContent={<FiTrash2 className="h-4 w-4" aria-hidden />}
                 >
                   Delete listing
                 </Button>
@@ -614,7 +622,12 @@ export default function JobEditorClient({
               )}
 
               <CardFooter className="flex flex-wrap justify-end gap-3">
-                <Button variant="flat" as={NextLink} href="/">
+                <Button
+                  variant="flat"
+                  as={NextLink}
+                  href="/"
+                  startContent={<FiArrowLeft className="h-4 w-4" aria-hidden />}
+                >
                   Cancel
                 </Button>
                 <Button
@@ -622,6 +635,7 @@ export default function JobEditorClient({
                   type="submit"
                   isDisabled={isSaving}
                   isLoading={isSaving}
+                  startContent={<FiSave className="h-4 w-4" aria-hidden />}
                 >
                   {mode === "edit" ? "Save changes" : "Create listing"}
                 </Button>
@@ -639,7 +653,10 @@ export default function JobEditorClient({
           {(onClose) => (
             <>
               <ModalHeader className="flex flex-col gap-1">
-                Remove listing?
+                <span className="flex items-center gap-2">
+                  <FiTrash2 className="h-5 w-5 text-danger-500 dark:text-danger-400" aria-hidden />
+                  Remove listing?
+                </span>
               </ModalHeader>
               <ModalBody>
                 <p>
@@ -651,6 +668,7 @@ export default function JobEditorClient({
                 <Button
                   variant="light"
                   onPress={onClose}
+                  startContent={<FiArrowLeft className="h-4 w-4" aria-hidden />}
                 >
                   Cancel
                 </Button>
@@ -661,6 +679,7 @@ export default function JobEditorClient({
                     void handleDelete();
                   }}
                   isLoading={isDeleting}
+                  startContent={<FiTrash2 className="h-4 w-4" aria-hidden />}
                 >
                   Delete listing
                 </Button>

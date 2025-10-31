@@ -1,6 +1,7 @@
 "use client";
 
 import NextLink from "next/link";
+import { useAtomValue } from "jotai";
 import {
   Accordion,
   AccordionItem,
@@ -16,6 +17,20 @@ import {
   Link,
 } from "@heroui/react";
 import type { Job } from "@/types/jobs";
+import { authStateAtom } from "@/atoms/auth";
+import {
+  FiArrowRight,
+  FiArrowLeft,
+  FiBriefcase,
+  FiCheckCircle,
+  FiClock,
+  FiEdit3,
+  FiExternalLink,
+  FiLogIn,
+  FiMapPin,
+  FiUserPlus,
+  FiPlus,
+} from "react-icons/fi";
 
 type JobDetailClientProps = {
   job: Job;
@@ -32,6 +47,9 @@ const getCompanyInitials = (company: string) =>
 
 export default function JobDetailClient({ job }: JobDetailClientProps) {
   const companyInitials = getCompanyInitials(job.companyName);
+  const authState = useAtomValue(authStateAtom);
+  const isAuthenticated = Boolean(authState.user);
+  const isOwner = isAuthenticated && authState.user?.id === job.posterId;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 pb-16 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
@@ -61,16 +79,24 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
-                <Chip variant="flat" color="primary">
+                <Chip
+                  variant="flat"
+                  color="primary"
+                  startContent={<FiBriefcase className="h-3 w-3" aria-hidden />}
+                >
                   {job.jobType}
                 </Chip>
                 <Chip
                   variant="flat"
                   className="bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                  startContent={<FiMapPin className="h-3 w-3" aria-hidden />}
                 >
                   {job.location}
                 </Chip>
-                <span>{job.postedOn}</span>
+                <span className="flex items-center gap-1">
+                  <FiClock className="h-3 w-3" aria-hidden />
+                  {job.postedOn}
+                </span>
               </div>
             </div>
             <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-end">
@@ -88,17 +114,41 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                 rel={job.applicationUrl ? "noopener noreferrer" : undefined}
                 color="primary"
                 className="w-full sm:w-auto"
+                endContent={<FiExternalLink className="h-4 w-4" aria-hidden />}
               >
                 Apply now
               </Button>
-              <Button
-                as={NextLink}
-                href="/sign-in"
-                variant="flat"
-                className="w-full sm:w-auto"
-              >
-                Manage this post
-              </Button>
+              {isOwner ? (
+                <Button
+                  as={NextLink}
+                  href={`/jobs/${job.slug}/edit`}
+                  variant="flat"
+                  className="w-full sm:w-auto"
+                  startContent={<FiEdit3 className="h-4 w-4" aria-hidden />}
+                >
+                  Edit listing
+                </Button>
+              ) : isAuthenticated ? (
+                <Button
+                  as={NextLink}
+                  href="/jobs/new"
+                  variant="flat"
+                  className="w-full sm:w-auto"
+                  startContent={<FiPlus className="h-4 w-4" aria-hidden />}
+                >
+                  Post another role
+                </Button>
+              ) : (
+                <Button
+                  as={NextLink}
+                  href="/sign-up"
+                  variant="flat"
+                  className="w-full sm:w-auto"
+                  startContent={<FiUserPlus className="h-4 w-4" aria-hidden />}
+                >
+                  Post a role
+                </Button>
+              )}
             </div>
           </CardBody>
         </Card>
@@ -130,9 +180,7 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                   <ul className="space-y-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                     {job.responsibilities.map((item) => (
                       <li key={item} className="flex gap-2">
-                        <span className="mt-1 text-blue-500 dark:text-blue-400">
-                          •
-                        </span>
+                        <FiCheckCircle className="mt-1 h-4 w-4 text-primary-500 dark:text-primary-400" aria-hidden />
                         <span>{item}</span>
                       </li>
                     ))}
@@ -146,9 +194,7 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                   <ul className="space-y-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                     {job.requirements.map((item) => (
                       <li key={item} className="flex gap-2">
-                        <span className="mt-1 text-blue-500 dark:text-blue-400">
-                          •
-                        </span>
+                        <FiCheckCircle className="mt-1 h-4 w-4 text-primary-500 dark:text-primary-400" aria-hidden />
                         <span>{item}</span>
                       </li>
                     ))}
@@ -162,9 +208,7 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                   <ul className="space-y-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                     {job.benefits.map((item) => (
                       <li key={item} className="flex gap-2">
-                        <span className="mt-1 text-blue-500 dark:text-blue-400">
-                          •
-                        </span>
+                        <FiCheckCircle className="mt-1 h-4 w-4 text-primary-500 dark:text-primary-400" aria-hidden />
                         <span>{item}</span>
                       </li>
                     ))}
@@ -186,7 +230,8 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
               </CardHeader>
               <CardBody className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="flex flex-col gap-1 rounded-xl border border-dashed border-zinc-200 p-3 text-sm dark:border-zinc-700">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    <FiMapPin className="h-3 w-3 text-primary-500 dark:text-primary-400" aria-hidden />
                     Location
                   </p>
                   <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
@@ -194,7 +239,8 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                   </p>
                 </div>
                 <div className="flex flex-col gap-1 rounded-xl border border-dashed border-zinc-200 p-3 text-sm dark:border-zinc-700">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    <FiBriefcase className="h-3 w-3 text-primary-500 dark:text-primary-400" aria-hidden />
                     Job type
                   </p>
                   <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
@@ -202,7 +248,8 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                   </p>
                 </div>
                 <div className="flex flex-col gap-1 rounded-xl border border-dashed border-zinc-200 p-3 text-sm dark:border-zinc-700 sm:col-span-2 lg:col-span-1">
-                  <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  <p className="flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    <FiClock className="h-3 w-3 text-primary-500 dark:text-primary-400" aria-hidden />
                     Published
                   </p>
                   <p className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
@@ -217,7 +264,11 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                 <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
                   About the company
                 </h2>
-                <Chip variant="flat" size="sm">
+                <Chip
+                  variant="flat"
+                  size="sm"
+                  startContent={<FiBriefcase className="h-3 w-3" aria-hidden />}
+                >
                   {job.companyName}
                 </Chip>
               </CardHeader>
@@ -229,9 +280,10 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
                   href="/"
                   color="primary"
                   size="sm"
-                  className="inline-flex items-center gap-1"
+                  className="inline-flex items-center gap-2"
                 >
                   Browse more roles
+                  <FiArrowRight className="h-4 w-4" aria-hidden />
                 </Link>
               </CardBody>
             </Card>
@@ -242,20 +294,79 @@ export default function JobDetailClient({ job }: JobDetailClientProps) {
           <CardBody className="flex flex-col gap-4 text-center md:flex-row md:items-center md:justify-between md:text-left">
             <div>
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                Need to update this listing?
+                {isOwner
+                  ? "You're viewing your listing"
+                  : isAuthenticated
+                    ? "Share another opportunity"
+                    : "Hiring? Create a free account"}
               </h2>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Sign in to the hiring portal to edit details, manage applicants,
-                or promote your openings across the board.
+                {isOwner
+                  ? "Jump back into the editor to adjust details or refresh your posting."
+                  : isAuthenticated
+                    ? "Keep momentum by publishing more openings for the community."
+                    : "Employers can post roles in minutes. Job seekers can always browse for free."}
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button as={NextLink} href="/sign-in" color="primary">
-                Sign in to hire
-              </Button>
-              <Button as={NextLink} href="/sign-up" variant="flat">
-                Create hiring account
-              </Button>
+              {isOwner ? (
+                <>
+                  <Button
+                    as={NextLink}
+                    href={`/jobs/${job.slug}/edit`}
+                    color="primary"
+                    startContent={<FiEdit3 className="h-4 w-4" aria-hidden />}
+                  >
+                    Open editor
+                  </Button>
+                  <Button
+                    as={NextLink}
+                    href="/"
+                    variant="flat"
+                    startContent={<FiArrowLeft className="h-4 w-4" aria-hidden />}
+                  >
+                    Back to listings
+                  </Button>
+                </>
+              ) : isAuthenticated ? (
+                <>
+                  <Button
+                    as={NextLink}
+                    href="/jobs/new"
+                    color="primary"
+                    startContent={<FiPlus className="h-4 w-4" aria-hidden />}
+                  >
+                    Post a new role
+                  </Button>
+                  <Button
+                    as={NextLink}
+                    href="/"
+                    variant="flat"
+                    startContent={<FiArrowLeft className="h-4 w-4" aria-hidden />}
+                  >
+                    Browse listings
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    as={NextLink}
+                    href="/sign-up"
+                    color="primary"
+                    startContent={<FiUserPlus className="h-4 w-4" aria-hidden />}
+                  >
+                    Create hiring account
+                  </Button>
+                  <Button
+                    as={NextLink}
+                    href="/sign-in"
+                    variant="flat"
+                    startContent={<FiLogIn className="h-4 w-4" aria-hidden />}
+                  >
+                    Sign in
+                  </Button>
+                </>
+              )}
             </div>
           </CardBody>
         </Card>

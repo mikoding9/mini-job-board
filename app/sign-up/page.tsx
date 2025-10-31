@@ -16,6 +16,14 @@ import {
 import { authStateAtom } from "@/atoms/auth";
 import { supabaseClient } from "@/lib/supabase-client";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
+import {
+  FiArrowLeft,
+  FiLock,
+  FiLogIn,
+  FiMail,
+  FiUser,
+  FiUserPlus,
+} from "react-icons/fi";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -118,6 +126,9 @@ export default function SignUpPage() {
             Create a hiring account to launch listings in minutes, update roles
             on the fly, and monitor applicant interest.
           </p>
+          <p className="text-xs text-zinc-400 dark:text-zinc-500">
+            Job seekers can explore current openings without signing up.
+          </p>
         </CardHeader>
         <CardBody className="space-y-6">
           <form className="space-y-5" onSubmit={handleSubmit}>
@@ -129,6 +140,7 @@ export default function SignUpPage() {
                 value={fullName}
                 onValueChange={setFullName}
                 isDisabled={isSubmitting}
+                startContent={<FiUser className="h-4 w-4 text-zinc-400" aria-hidden />}
               />
               <Input
                 isRequired
@@ -138,6 +150,7 @@ export default function SignUpPage() {
                 value={email}
                 onValueChange={setEmail}
                 isDisabled={isSubmitting}
+                startContent={<FiMail className="h-4 w-4 text-zinc-400" aria-hidden />}
               />
             </div>
             <Input
@@ -148,6 +161,7 @@ export default function SignUpPage() {
               value={password}
               onValueChange={setPassword}
               isDisabled={isSubmitting}
+              startContent={<FiLock className="h-4 w-4 text-zinc-400" aria-hidden />}
             />
             <Checkbox
               isSelected={wantsNewsletter}
@@ -167,13 +181,21 @@ export default function SignUpPage() {
               className="mt-6 w-full"
               isDisabled={isSubmitting}
               isLoading={isSubmitting}
+              startContent={<FiUserPlus className="h-4 w-4" aria-hidden />}
             >
               Create hiring account
             </Button>
           </form>
           <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
             Already have an account?{" "}
-            <Link as={NextLink} href="/sign-in" color="primary" size="sm">
+            <Link
+              as={NextLink}
+              href="/sign-in"
+              color="primary"
+              size="sm"
+              className="inline-flex items-center gap-1 align-middle"
+            >
+              <FiLogIn className="h-4 w-4" aria-hidden />
               Sign in
             </Link>
           </p>
@@ -182,8 +204,9 @@ export default function SignUpPage() {
             href="/"
             color="foreground"
             underline="always"
-            className="mx-auto block w-max text-xs font-medium text-zinc-500 dark:text-zinc-400"
+            className="mx-auto flex w-max items-center gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400"
           >
+            <FiArrowLeft className="h-3 w-3" aria-hidden />
             Listings stay public—return to the board
           </Link>
         </CardBody>
