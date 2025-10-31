@@ -18,6 +18,7 @@ import {
   NavbarBrand,
   NavbarContent,
   NavbarItem,
+  Pagination,
   Select,
   SelectItem,
   Modal,
@@ -26,7 +27,11 @@ import {
   ModalFooter,
   ModalHeader,
 } from "@heroui/react";
-import { fetchPublishedJobs } from "@/lib/jobs";
+import {
+  fetchPublishedJobFilters,
+  fetchPublishedJobsPage,
+  type PublishedJobsPageResult,
+} from "@/lib/jobs";
 import { supabaseClient } from "@/lib/supabase-client";
 import { authStateAtom } from "@/atoms/auth";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
@@ -42,8 +47,12 @@ const getValueFromSelection = (keys: Selection): string => {
   return value ? String(value) : "all";
 };
 
+const PAGE_SIZE = 5;
+
 export default function Home() {
   const authState = useAtomValue(authStateAtom);
+  const isAuthenticated = Boolean(authState.user);
+  const currentUserId = authState.user?.id ?? null;
   const [locationKeys, setLocationKeys] = useState<Selection>(
     toSelectedKeys("all"),
   );
@@ -57,6 +66,7 @@ export default function Home() {
     null,
   );
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const selectedLocation = useMemo(
     () => getValueFromSelection(locationKeys),
@@ -67,23 +77,83 @@ export default function Home() {
     [jobTypeKeys],
   );
 
+  const posterIdFilter =
+    showMineOnly && currentUserId ? currentUserId : null;
+  const locationFilter = selectedLocation === "all" ? null : selectedLocation;
+  const jobTypeFilter = selectedJobType === "all" ? null : selectedJobType;
+
   const {
-    data: jobs,
+    data: jobPage,
     error,
     isLoading,
-    mutate,
-  } = useSWR<Job[]>("jobs/published", () => fetchPublishedJobs(), {
-    revalidateOnFocus: false,
-  });
-
-  const isAuthenticated = Boolean(authState.user);
-  const currentUserId = authState.user?.id ?? null;
+    mutate: mutateJobs,
+  } = useSWR<PublishedJobsPageResult>(
+    ["jobs/published", currentPage, locationFilter, jobTypeFilter, posterIdFilter],
+    ([, page, location, jobType, posterId]) =>
+      fetchPublishedJobsPage({
+        page,
+        pageSize: PAGE_SIZE,
+        location: location ?? undefined,
+        jobType: jobType ?? undefined,
+        posterId: posterId ?? undefined,
+      }),
+    {
+      keepPreviousData: true,
+      revalidateOnFocus: false,
+    },
+  );
 
   useEffect(() => {
     if (!isAuthenticated) {
       setShowMineOnly(false);
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedLocation, selectedJobType, showMineOnly]);
+
+  const {
+    data: filterOptions,
+    mutate: mutateFilters,
+  } = useSWR(
+    ["jobs/published/filters", posterIdFilter],
+    ([, posterId]) =>
+      fetchPublishedJobFilters({
+        posterId: posterId ?? undefined,
+      }),
+    {
+      revalidateOnFocus: false,
+    },
+  );
+
+  const jobLocations = useMemo(() => {
+    return filterOptions?.locations ?? [];
+  }, [filterOptions]);
+
+  const jobTypes = useMemo(() => {
+    return filterOptions?.jobTypes ?? [];
+  }, [filterOptions]);
+
+  useEffect(() => {
+    if (
+      selectedLocation !== "all" &&
+      jobLocations.length > 0 &&
+      !jobLocations.includes(selectedLocation)
+    ) {
+      setLocationKeys(toSelectedKeys("all"));
+    }
+  }, [jobLocations, selectedLocation]);
+
+  useEffect(() => {
+    if (
+      selectedJobType !== "all" &&
+      jobTypes.length > 0 &&
+      !jobTypes.includes(selectedJobType)
+    ) {
+      setJobTypeKeys(toSelectedKeys("all"));
+    }
+  }, [jobTypes, selectedJobType]);
 
   const handleSignOut = useCallback(async () => {
     setIsSigningOut(true);
@@ -104,30 +174,6 @@ export default function Home() {
     }
   }, []);
 
-  const scopedJobs = useMemo(() => {
-    if (!jobs) {
-      return [];
-    }
-    if (showMineOnly && currentUserId) {
-      return jobs.filter((job) => job.posterId === currentUserId);
-    }
-    return jobs;
-  }, [jobs, showMineOnly, currentUserId]);
-
-  const jobLocations = useMemo(() => {
-    if (scopedJobs.length === 0) {
-      return [];
-    }
-    return Array.from(new Set(scopedJobs.map((job) => job.location))).sort();
-  }, [scopedJobs]);
-
-  const jobTypes = useMemo(() => {
-    if (scopedJobs.length === 0) {
-      return [];
-    }
-    return Array.from(new Set(scopedJobs.map((job) => job.jobType))).sort();
-  }, [scopedJobs]);
-
   const requestRemoveListing = useCallback((job: Job) => {
     setJobPendingDeletion(job);
     setIsDeleteDialogOpen(true);
@@ -142,23 +188,9 @@ export default function Home() {
     setDeletingJobId(jobToDelete.id);
 
     try {
-      await mutate(
-        async (current) => {
-          await deleteJob(jobToDelete.id);
-          return (current ?? []).filter(
-            (existing) => existing.id !== jobToDelete.id,
-          );
-        },
-        {
-          optimisticData: (current) =>
-            (current ?? []).filter(
-              (existing) => existing.id !== jobToDelete.id,
-            ),
-          rollbackOnError: true,
-          populateCache: true,
-          revalidate: true,
-        },
-      );
+      await deleteJob(jobToDelete.id);
+      await mutateJobs();
+      await mutateFilters();
 
       showSuccessToast({
         title: "Listing removed",
@@ -176,7 +208,7 @@ export default function Home() {
       setDeletingJobId(null);
       setJobPendingDeletion(null);
     }
-  }, [jobPendingDeletion, mutate]);
+  }, [jobPendingDeletion, mutateJobs, mutateFilters]);
 
   const handleDeleteDialogChange = useCallback((isOpen: boolean) => {
     setIsDeleteDialogOpen(isOpen);
@@ -185,23 +217,19 @@ export default function Home() {
     }
   }, []);
 
-  const filteredJobs = useMemo(() => {
-    if (scopedJobs.length === 0) {
-      return [];
+  const totalJobs = jobPage?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalJobs / PAGE_SIZE));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
+  }, [currentPage, totalPages]);
 
-    return scopedJobs.filter((job) => {
-      const matchesLocation =
-        selectedLocation === "all" || job.location === selectedLocation;
-      const matchesJobType =
-        selectedJobType === "all" || job.jobType === selectedJobType;
-      return matchesLocation && matchesJobType;
-    });
-  }, [scopedJobs, selectedJobType, selectedLocation]);
+  const paginatedJobs = jobPage?.jobs ?? [];
 
-  const openRolesCount = filteredJobs.length;
-  const showEmptyState =
-    !isLoading && !error && jobs && filteredJobs.length === 0;
+  const openRolesCount = totalJobs;
+  const showEmptyState = !isLoading && !error && totalJobs === 0;
   const emptyStateMessage =
     showMineOnly && isAuthenticated
       ? "You haven't published any listings yet. Post your first role to see it here."
@@ -380,7 +408,7 @@ export default function Home() {
               </Card>
             )}
 
-            {filteredJobs.map((job) => (
+            {paginatedJobs.map((job) => (
               <Card
                 key={job.id}
                 shadow="sm"
@@ -447,6 +475,16 @@ export default function Home() {
               </Card>
             ))}
           </div>
+          {totalJobs > PAGE_SIZE && (
+            <div className="mt-6 flex justify-center">
+              <Pagination
+                total={totalPages}
+                page={currentPage}
+                onChange={(page) => setCurrentPage(page)}
+                showControls
+              />
+            </div>
+          )}
         </section>
       </main>
       <Modal

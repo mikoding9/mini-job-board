@@ -27,7 +27,7 @@ function buildHeaders(extra?: HeadersInit): Headers {
   return headers;
 }
 
-async function supabaseFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function supabaseRequest(path: string, init?: RequestInit): Promise<Response> {
   assertSupabaseEnv();
 
   const response = await fetch(`${REST_URL!}/${path}`, {
@@ -43,7 +43,21 @@ async function supabaseFetch<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
+  return response;
+}
+
+async function supabaseFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await supabaseRequest(path, init);
   return (await response.json()) as T;
+}
+
+async function supabaseFetchWithResponse<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<{ data: T; response: Response }> {
+  const response = await supabaseRequest(path, init);
+  const data = (await response.json()) as T;
+  return { data, response };
 }
 
 const FALLBACK_POSTED_LABELS: Record<string, string> = {
@@ -137,11 +151,106 @@ export function transformJobRecord(record: JobRecord): Job {
   };
 }
 
-export async function fetchPublishedJobs(): Promise<Job[]> {
-  const records = await supabaseFetch<JobRecord[]>(
-    "jobs?select=*&job_status=eq.published&order=published_at.desc.nullslast,created_at.desc",
+const JOBS_ORDER = "published_at.desc.nullslast,created_at.desc";
+
+export type PublishedJobsPageParams = {
+  page: number;
+  pageSize: number;
+  location?: string;
+  jobType?: string;
+  posterId?: string;
+};
+
+export type PublishedJobsPageResult = {
+  jobs: Job[];
+  total: number;
+};
+
+function sanitizePage(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value) || value === undefined || value <= 0) {
+    return fallback;
+  }
+  return Math.floor(value);
+}
+
+export async function fetchPublishedJobsPage(
+  params: PublishedJobsPageParams,
+): Promise<PublishedJobsPageResult> {
+  const page = sanitizePage(params.page, 1);
+  const pageSize = sanitizePage(params.pageSize, 5);
+  const offset = (page - 1) * pageSize;
+
+  let query = `jobs?select=*&job_status=eq.published&order=${JOBS_ORDER}&limit=${pageSize}&offset=${offset}`;
+
+  if (params.location) {
+    query += `&location=eq.${encodeURIComponent(params.location)}`;
+  }
+
+  if (params.jobType) {
+    query += `&job_type=eq.${encodeURIComponent(params.jobType)}`;
+  }
+
+  if (params.posterId) {
+    query += `&poster_id=eq.${encodeURIComponent(params.posterId)}`;
+  }
+
+  const { data, response } = await supabaseFetchWithResponse<JobRecord[]>(
+    query,
+    {
+      headers: {
+        Prefer: "count=exact",
+      },
+    },
   );
-  return records.map(transformJobRecord);
+
+  const contentRange = response.headers.get("Content-Range");
+  const total = (() => {
+    if (!contentRange) {
+      return data.length;
+    }
+    const [, totalPart] = contentRange.split("/");
+    const parsed = Number.parseInt(totalPart ?? "", 10);
+    return Number.isNaN(parsed) ? data.length : parsed;
+  })();
+
+  return {
+    jobs: data.map(transformJobRecord),
+    total,
+  };
+}
+
+export async function fetchPublishedJobFilters(params?: {
+  posterId?: string;
+}): Promise<{ locations: string[]; jobTypes: string[] }> {
+  const posterId = params?.posterId;
+
+  let query = "jobs?select=location,job_type&job_status=eq.published";
+
+  if (posterId) {
+    query += `&poster_id=eq.${encodeURIComponent(posterId)}`;
+  }
+
+  const records = await supabaseFetch<
+    Array<Pick<JobRecord, "location" | "job_type">>
+  >(query);
+
+  const locations = Array.from(
+    new Set(
+      records
+        .map((record) => record.location)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const jobTypes = Array.from(
+    new Set(
+      records
+        .map((record) => record.job_type)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
+  return { locations, jobTypes };
 }
 
 export async function fetchJobBySlug(slug: string): Promise<Job | null> {

@@ -21,6 +21,7 @@ import {
   Checkbox,
   Divider,
   Input,
+  Skeleton,
   Select,
   SelectItem,
   Textarea,
@@ -348,14 +349,40 @@ export default function JobEditorClient({
   if (isEditing && isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 px-6 py-16 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
-        <Card className="w-full max-w-lg border border-zinc-200 bg-white/90 p-6 shadow-lg backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90">
-          <CardHeader>
-            <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              Loading listing…
-            </h1>
+        <Card className="w-full max-w-4xl border border-zinc-200/70 bg-white/90 shadow-lg backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-900/90">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-6 w-40 rounded-md" />
+              <Skeleton className="h-4 w-64 rounded-md" />
+            </div>
+            <Skeleton className="h-9 w-48 rounded-md" />
           </CardHeader>
-          <CardBody className="text-sm text-zinc-600 dark:text-zinc-300">
-            Fetching the latest job details.
+          <Divider />
+          <CardBody className="space-y-6">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton
+                key={index}
+                className="h-12 w-full rounded-lg"
+              />
+            ))}
+            <div className="grid gap-4 md:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <Skeleton
+                  key={`grid-${index}`}
+                  className="h-12 w-full rounded-lg"
+                />
+              ))}
+            </div>
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Skeleton
+                key={`text-${index}`}
+                className="h-24 w-full rounded-lg"
+              />
+            ))}
+            <div className="flex justify-end gap-3">
+              <Skeleton className="h-10 w-24 rounded-full" />
+              <Skeleton className="h-10 w-32 rounded-full" />
+            </div>
           </CardBody>
         </Card>
       </div>
