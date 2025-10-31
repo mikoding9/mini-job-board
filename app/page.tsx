@@ -20,11 +20,18 @@ import {
   NavbarItem,
   Select,
   SelectItem,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
 } from "@heroui/react";
 import { fetchPublishedJobs } from "@/lib/jobs";
 import { supabaseClient } from "@/lib/supabase-client";
 import { authStateAtom } from "@/atoms/auth";
+import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import type { Job } from "@/types/jobs";
+import { deleteJob } from "@/lib/job-mutations";
 
 const toSelectedKeys = (value: string): Selection => new Set([value]);
 const getValueFromSelection = (keys: Selection): string => {
@@ -45,6 +52,11 @@ export default function Home() {
   );
   const [showMineOnly, setShowMineOnly] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
+  const [jobPendingDeletion, setJobPendingDeletion] = useState<Job | null>(
+    null,
+  );
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const selectedLocation = useMemo(
     () => getValueFromSelection(locationKeys),
@@ -59,6 +71,7 @@ export default function Home() {
     data: jobs,
     error,
     isLoading,
+    mutate,
   } = useSWR<Job[]>("jobs/published", () => fetchPublishedJobs(), {
     revalidateOnFocus: false,
   });
@@ -76,8 +89,16 @@ export default function Home() {
     setIsSigningOut(true);
     try {
       await supabaseClient.auth.signOut();
+      showSuccessToast({
+        title: "Signed out",
+        description: "You can keep browsing public listings.",
+      });
     } catch (error) {
-      console.error("Failed to sign out", error);
+      showErrorToast({
+        title: "Sign-out failed",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+      });
     } finally {
       setIsSigningOut(false);
     }
@@ -106,6 +127,63 @@ export default function Home() {
     }
     return Array.from(new Set(scopedJobs.map((job) => job.jobType))).sort();
   }, [scopedJobs]);
+
+  const requestRemoveListing = useCallback((job: Job) => {
+    setJobPendingDeletion(job);
+    setIsDeleteDialogOpen(true);
+  }, []);
+
+  const confirmRemoveListing = useCallback(async () => {
+    if (!jobPendingDeletion) {
+      return;
+    }
+
+    const jobToDelete = jobPendingDeletion;
+    setDeletingJobId(jobToDelete.id);
+
+    try {
+      await mutate(
+        async (current) => {
+          await deleteJob(jobToDelete.id);
+          return (current ?? []).filter(
+            (existing) => existing.id !== jobToDelete.id,
+          );
+        },
+        {
+          optimisticData: (current) =>
+            (current ?? []).filter(
+              (existing) => existing.id !== jobToDelete.id,
+            ),
+          rollbackOnError: true,
+          populateCache: true,
+          revalidate: true,
+        },
+      );
+
+      showSuccessToast({
+        title: "Listing removed",
+        description: "The job is no longer visible to candidates.",
+      });
+    } catch (removeError) {
+      showErrorToast({
+        title: "Unable to remove listing",
+        description:
+          removeError instanceof Error
+            ? removeError.message
+            : "Please try again.",
+      });
+    } finally {
+      setDeletingJobId(null);
+      setJobPendingDeletion(null);
+    }
+  }, [jobPendingDeletion, mutate]);
+
+  const handleDeleteDialogChange = useCallback((isOpen: boolean) => {
+    setIsDeleteDialogOpen(isOpen);
+    if (!isOpen) {
+      setJobPendingDeletion(null);
+    }
+  }, []);
 
   const filteredJobs = useMemo(() => {
     if (scopedJobs.length === 0) {
@@ -332,7 +410,7 @@ export default function Home() {
                     {job.postedOn}
                   </p>
                 </CardBody>
-                <CardFooter className="flex flex-wrap gap-3 justify-between">
+                <CardFooter className="flex flex-wrap justify-between gap-3">
                   <Button
                     as={NextLink}
                     href={`/jobs/${job.slug}`}
@@ -344,7 +422,7 @@ export default function Home() {
                     View details
                   </Button>
                   {isAuthenticated && job.posterId === currentUserId && (
-                    <div>
+                    <div className="flex gap-2">
                       <Button
                         as={NextLink}
                         href={`/jobs/${job.slug}/edit`}
@@ -354,10 +432,12 @@ export default function Home() {
                         Edit listing
                       </Button>
                       <Button
-                        as={NextLink}
-                        href={`/jobs/${job.slug}/edit`}
-                        variant="light"
+                        color="danger"
+                        variant="bordered"
                         size="sm"
+                        onPress={() => requestRemoveListing(job)}
+                        isDisabled={deletingJobId === job.id}
+                        isLoading={deletingJobId === job.id}
                       >
                         Remove listing
                       </Button>
@@ -369,6 +449,47 @@ export default function Home() {
           </div>
         </section>
       </main>
+      <Modal
+        isOpen={isDeleteDialogOpen}
+        onOpenChange={handleDeleteDialogChange}
+        placement="center"
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader className="flex flex-col gap-1">
+                Remove listing?
+              </ModalHeader>
+              <ModalBody>
+                <p>
+                  {jobPendingDeletion
+                    ? `Remove "${jobPendingDeletion.title}" permanently? This action cannot be undone.`
+                    : "Remove this listing permanently? This action cannot be undone."}
+                </p>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" onPress={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  color="danger"
+                  onPress={() => {
+                    void confirmRemoveListing();
+                    onClose();
+                  }}
+                  isLoading={
+                    jobPendingDeletion
+                      ? deletingJobId === jobPendingDeletion.id
+                      : false
+                  }
+                >
+                  Delete listing
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
 } from "@heroui/react";
 import { authStateAtom } from "@/atoms/auth";
 import { supabaseClient } from "@/lib/supabase-client";
+import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -24,8 +25,6 @@ export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [wantsNewsletter, setWantsNewsletter] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -36,21 +35,24 @@ export default function SignUpPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setErrorMessage(null);
-    setSuccessMessage(null);
 
     const trimmedName = fullName.trim();
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedName) {
-      setErrorMessage(
-        "Please provide your name so we can personalize your account.",
-      );
+      showErrorToast({
+        title: "Sign-up incomplete",
+        description:
+          "Please provide your name so we can personalize your account.",
+      });
       return;
     }
 
     if (!trimmedEmail || !password) {
-      setErrorMessage("Email and password are required.");
+      showErrorToast({
+        title: "Sign-up incomplete",
+        description: "Email and password are required.",
+      });
       return;
     }
 
@@ -75,22 +77,29 @@ export default function SignUpPage() {
       });
 
       if (error) {
-        setErrorMessage(error.message);
+        showErrorToast({
+          title: "Sign-up failed",
+          description: error.message,
+        });
         setIsSubmitting(false);
         return;
       }
 
-      setSuccessMessage(
-        "Check your email to confirm your address and finish setting up your hiring account.",
-      );
+      showSuccessToast({
+        title: "Check your inbox",
+        description:
+          "Confirm your email to finish setting up your hiring account.",
+      });
       setIsSubmitting(false);
       setFullName("");
       setEmail("");
       setPassword("");
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Something went wrong.",
-      );
+      showErrorToast({
+        title: "Sign-up failed",
+        description:
+          error instanceof Error ? error.message : "Something went wrong.",
+      });
       setIsSubmitting(false);
     }
   };
@@ -152,16 +161,6 @@ export default function SignUpPage() {
               Send me weekly hiring insights, candidate spotlights, and product
               updates.
             </Checkbox>
-            {errorMessage && (
-              <p className="text-sm text-red-600 dark:text-red-400 mt-6">
-                {errorMessage}
-              </p>
-            )}
-            {successMessage && (
-              <p className="text-sm text-green-600 dark:text-green-400 mt-6">
-                {successMessage}
-              </p>
-            )}
             <Button
               color="primary"
               type="submit"

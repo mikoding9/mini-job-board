@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -18,6 +24,11 @@ import {
   Select,
   SelectItem,
   Textarea,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
 } from "@heroui/react";
 import type { Job, JobStatus, JobType } from "@/types/jobs";
 import { authStateAtom } from "@/atoms/auth";
@@ -29,6 +40,7 @@ import {
   updateJob,
 } from "@/lib/job-mutations";
 import { fetchJobBySlugForOwner } from "@/lib/jobs";
+import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 const JOB_TYPE_OPTIONS: JobType[] = ["Full-Time", "Part-Time", "Contract"];
 const JOB_STATUS_OPTIONS: JobStatus[] = ["draft", "published", "archived"];
@@ -127,12 +139,10 @@ export default function JobEditorClient({
   const [tagsText, setTagsText] = useState("");
   const [publishedAtValue, setPublishedAtValue] = useState("");
   const [publishImmediately, setPublishImmediately] = useState(false);
-
-  const [formError, setFormError] = useState<string | null>(null);
-  const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [initialized, setInitialized] = useState(mode === "create");
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const isOwner = useMemo(() => {
     if (!isEditing) {
@@ -169,26 +179,36 @@ export default function JobEditorClient({
   }, [isEditing, job, initialized]);
 
   useEffect(() => {
-    if (isEditing && !isLoading && !job && (error || !isAuthenticated)) {
-      setFormError(
-        error?.message ??
-          "We couldn't find that job or you don't have permission to edit it.",
-      );
+    if (isEditing && error) {
+      showErrorToast({
+        title: "Unable to load listing",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+      });
     }
-  }, [isEditing, job, error, isLoading, isAuthenticated]);
+  }, [isEditing, error]);
+
+  useEffect(() => {
+    if (isEditing && !isLoading && job && !isOwner) {
+      showErrorToast({
+        title: "Permission required",
+        description: "You can only manage listings you created.",
+      });
+    }
+  }, [isEditing, isLoading, job, isOwner]);
 
   const buildPayload = (): UpdateJobInput => {
     const jobType = getValueFromSelection(jobTypeKeys) as JobType;
     const jobStatus = getValueFromSelection(jobStatusKeys) as JobStatus;
-    const previousPublishedAt = isEditing ? job?.publishedAt ?? null : null;
+    const previousPublishedAt = isEditing ? (job?.publishedAt ?? null) : null;
 
     const resolvedPublishedAt =
       jobStatus === "published"
         ? publishImmediately
           ? new Date().toISOString()
-          : fromDateTimeLocal(publishedAtValue) ??
+          : (fromDateTimeLocal(publishedAtValue) ??
             previousPublishedAt ??
-            new Date().toISOString()
+            new Date().toISOString())
         : null;
 
     return {
@@ -215,11 +235,11 @@ export default function JobEditorClient({
 
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setFormError(null);
-    setFormSuccess(null);
-
     if (!isAuthenticated) {
-      setFormError("Please sign in to manage your listings.");
+      showErrorToast({
+        title: "Sign-in required",
+        description: "Please sign in to manage your listings.",
+      });
       return;
     }
 
@@ -234,7 +254,10 @@ export default function JobEditorClient({
         }
         const updatedJob = await updateJob(job.id, payload);
         await mutate(updatedJob, { revalidate: true });
-        setFormSuccess("Listing updated successfully.");
+        showSuccessToast({
+          title: "Listing updated",
+          description: "Your changes are live for candidates.",
+        });
         setPublishImmediately(false);
         if (updatedJob.jobStatus === "published") {
           setPublishedAtValue(toDateTimeLocal(updatedJob.publishedAt));
@@ -250,47 +273,54 @@ export default function JobEditorClient({
           posterId: currentUserId,
         };
         const createdJob = await createJob(createPayload);
-        setFormSuccess("Listing created. Redirecting to edit view…");
+        showSuccessToast({
+          title: "Listing created",
+          description: "Redirecting you to the full editor.",
+        });
         setTimeout(() => {
           router.replace(`/jobs/${createdJob.slug}/edit`);
         }, 600);
       }
     } catch (submissionError) {
-      setFormError(
-        submissionError instanceof Error
-          ? submissionError.message
-          : "Failed to save listing. Please try again.",
-      );
+      showErrorToast({
+        title: "Unable to save listing",
+        description:
+          submissionError instanceof Error
+            ? submissionError.message
+            : "Please try again.",
+      });
     } finally {
       setIsSaving(false);
     }
   };
 
+  const handleOpenDeleteDialog = useCallback(() => {
+    if (!isEditing || !job) return;
+    setIsDeleteDialogOpen(true);
+  }, [isEditing, job]);
+
   const handleDelete = useCallback(async () => {
     if (!isEditing || !job) return;
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this listing? This action cannot be undone.",
-    );
-    if (!confirmed) {
-      return;
-    }
-
     setIsDeleting(true);
-    setFormError(null);
-    setFormSuccess(null);
 
     try {
       await deleteJob(job.id);
-      setFormSuccess("Listing deleted. Redirecting to dashboard…");
+      showSuccessToast({
+        title: "Listing deleted",
+        description: "Redirecting you back to the board.",
+      });
       setTimeout(() => {
         router.replace("/");
+        setIsDeleting(false);
       }, 800);
     } catch (deleteError) {
-      setFormError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "Failed to delete job. Please try again.",
-      );
+      showErrorToast({
+        title: "Unable to delete listing",
+        description:
+          deleteError instanceof Error
+            ? deleteError.message
+            : "Please try again.",
+      });
       setIsDeleting(false);
     }
   }, [isEditing, job, router]);
@@ -343,8 +373,8 @@ export default function JobEditorClient({
           </CardHeader>
           <CardBody className="space-y-4 text-sm text-zinc-600 dark:text-zinc-300">
             <p>
-              We couldn&apos;t find that job or you don&apos;t have permission to edit
-              it.
+              We couldn&apos;t find that job or you don&apos;t have permission
+              to edit it.
             </p>
             <Button as={NextLink} href="/" color="primary">
               Return to board
@@ -389,7 +419,7 @@ export default function JobEditorClient({
                   color="danger"
                   variant="ghost"
                   size="sm"
-                  onPress={handleDelete}
+                  onPress={handleOpenDeleteDialog}
                   isDisabled={isDeleting}
                   isLoading={isDeleting}
                 >
@@ -556,17 +586,6 @@ export default function JobEditorClient({
                 </Card>
               )}
 
-              {formError && (
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {formError}
-                </p>
-              )}
-              {formSuccess && (
-                <p className="text-sm text-green-600 dark:text-green-400">
-                  {formSuccess}
-                </p>
-              )}
-
               <CardFooter className="flex flex-wrap justify-end gap-3">
                 <Button variant="flat" as={NextLink} href="/">
                   Cancel
@@ -584,6 +603,45 @@ export default function JobEditorClient({
           </CardBody>
         </Card>
       </div>
+      <Modal
+        isOpen={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        placement="center"
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader className="flex flex-col gap-1">
+                Remove listing?
+              </ModalHeader>
+              <ModalBody>
+                <p>
+                  Deleting this listing removes it permanently. This action
+                  cannot be undone.
+                </p>
+              </ModalBody>
+              <ModalFooter>
+                <Button
+                  variant="light"
+                  onPress={onClose}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  color="danger"
+                  onPress={() => {
+                    onClose();
+                    void handleDelete();
+                  }}
+                  isLoading={isDeleting}
+                >
+                  Delete listing
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { Provider as JotaiProvider, useSetAtom } from "jotai";
 import { HeroUIProvider } from "@heroui/react";
+import { ToastProvider } from "@heroui/toast";
+
 import { authStateAtom } from "@/atoms/auth";
 import { supabaseClient } from "@/lib/supabase-client";
 
@@ -59,6 +61,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <JotaiProvider>
       <HeroUIProvider>
+        <ToastProvider placement="bottom-right" />
         <AuthListener />
         {children}
       </HeroUIProvider>

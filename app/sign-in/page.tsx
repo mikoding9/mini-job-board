@@ -15,6 +15,7 @@ import {
 } from "@heroui/react";
 import { authStateAtom } from "@/atoms/auth";
 import { supabaseClient } from "@/lib/supabase-client";
+import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -23,8 +24,6 @@ export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -35,14 +34,15 @@ export default function SignInPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setErrorMessage(null);
-    setSuccessMessage(null);
     setIsSubmitting(true);
 
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail || !password) {
-      setErrorMessage("Please enter both an email and password.");
+      showErrorToast({
+        title: "Sign in failed",
+        description: "Please enter both an email and password.",
+      });
       setIsSubmitting(false);
       return;
     }
@@ -57,18 +57,26 @@ export default function SignInPage() {
       });
 
       if (error) {
-        setErrorMessage(error.message);
+        showErrorToast({
+          title: "Sign in failed",
+          description: error.message,
+        });
         setIsSubmitting(false);
         return;
       }
 
-      setSuccessMessage("Signed in successfully. Redirecting…");
+      showSuccessToast({
+        title: "Welcome back",
+        description: "Signed in successfully.",
+      });
       setIsSubmitting(false);
       router.replace("/");
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Something went wrong.",
-      );
+      showErrorToast({
+        title: "Sign in failed",
+        description:
+          error instanceof Error ? error.message : "Something went wrong.",
+      });
       setIsSubmitting(false);
     }
   };
@@ -120,16 +128,6 @@ export default function SignInPage() {
                 Forgot password?
               </Link>
             </div>
-            {errorMessage && (
-              <p className="text-sm text-red-600 dark:text-red-400">
-                {errorMessage}
-              </p>
-            )}
-            {successMessage && (
-              <p className="text-sm text-green-600 dark:text-green-400">
-                {successMessage}
-              </p>
-            )}
             <Button
               color="primary"
               type="submit"
