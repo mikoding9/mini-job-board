@@ -15,24 +15,32 @@ function assertSupabaseEnv() {
   }
 }
 
-function buildHeaders(extra?: HeadersInit): Headers {
+function buildHeaders(extra: HeadersInit | undefined, accessToken?: string): Headers {
   assertSupabaseEnv();
 
   const headers = new Headers(extra);
   headers.set("apikey", SUPABASE_ANON_KEY!);
-  headers.set("Authorization", `Bearer ${SUPABASE_ANON_KEY!}`);
+  headers.set("Authorization", `Bearer ${accessToken ?? SUPABASE_ANON_KEY!}`);
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   return headers;
 }
 
-async function supabaseRequest(path: string, init?: RequestInit): Promise<Response> {
+type SupabaseRequestOptions = {
+  accessToken?: string;
+};
+
+async function supabaseRequest(
+  path: string,
+  init?: RequestInit,
+  options?: SupabaseRequestOptions,
+): Promise<Response> {
   assertSupabaseEnv();
 
   const response = await fetch(`${REST_URL!}/${path}`, {
     ...init,
-    headers: buildHeaders(init?.headers),
+    headers: buildHeaders(init?.headers, options?.accessToken),
     cache: "no-store",
   });
 
@@ -46,16 +54,21 @@ async function supabaseRequest(path: string, init?: RequestInit): Promise<Respon
   return response;
 }
 
-async function supabaseFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await supabaseRequest(path, init);
+async function supabaseFetch<T>(
+  path: string,
+  init?: RequestInit,
+  options?: SupabaseRequestOptions,
+): Promise<T> {
+  const response = await supabaseRequest(path, init, options);
   return (await response.json()) as T;
 }
 
 async function supabaseFetchWithResponse<T>(
   path: string,
   init?: RequestInit,
+  options?: SupabaseRequestOptions,
 ): Promise<{ data: T; response: Response }> {
-  const response = await supabaseRequest(path, init);
+  const response = await supabaseRequest(path, init, options);
   const data = (await response.json()) as T;
   return { data, response };
 }
@@ -159,6 +172,7 @@ export type PublishedJobsPageParams = {
   location?: string;
   jobType?: string;
   posterId?: string;
+  accessToken?: string;
 };
 
 export type PublishedJobsPageResult = {
@@ -180,7 +194,7 @@ export async function fetchPublishedJobsPage(
   const pageSize = sanitizePage(params.pageSize, 5);
   const offset = (page - 1) * pageSize;
 
-  let query = `jobs?select=*&job_status=eq.published&order=${JOBS_ORDER}&limit=${pageSize}&offset=${offset}`;
+  let query = `jobs?select=*&order=${JOBS_ORDER}&limit=${pageSize}&offset=${offset}`;
 
   if (params.location) {
     query += `&location=eq.${encodeURIComponent(params.location)}`;
@@ -201,6 +215,7 @@ export async function fetchPublishedJobsPage(
         Prefer: "count=exact",
       },
     },
+    { accessToken: params.accessToken },
   );
 
   const contentRange = response.headers.get("Content-Range");
@@ -221,10 +236,11 @@ export async function fetchPublishedJobsPage(
 
 export async function fetchPublishedJobFilters(params?: {
   posterId?: string;
+  accessToken?: string;
 }): Promise<{ locations: string[]; jobTypes: string[] }> {
   const posterId = params?.posterId;
 
-  let query = "jobs?select=location,job_type&job_status=eq.published";
+  let query = "jobs?select=location,job_type";
 
   if (posterId) {
     query += `&poster_id=eq.${encodeURIComponent(posterId)}`;
@@ -232,7 +248,7 @@ export async function fetchPublishedJobFilters(params?: {
 
   const records = await supabaseFetch<
     Array<Pick<JobRecord, "location" | "job_type">>
-  >(query);
+  >(query, undefined, { accessToken: params?.accessToken });
 
   const locations = Array.from(
     new Set(
@@ -253,24 +269,31 @@ export async function fetchPublishedJobFilters(params?: {
   return { locations, jobTypes };
 }
 
-export async function fetchJobBySlug(slug: string): Promise<Job | null> {
+export async function fetchJobBySlug(
+  slug: string,
+  options?: SupabaseRequestOptions,
+): Promise<Job | null> {
   if (!slug) {
     return null;
   }
 
   const records = await supabaseFetch<JobRecord[]>(
-    `jobs?slug=eq.${encodeURIComponent(
-      slug,
-    )}&job_status=eq.published&select=*&limit=1`,
+    `jobs?slug=eq.${encodeURIComponent(slug)}&select=*&limit=1`,
+    undefined,
+    options,
   );
 
   const record = records[0];
   return record ? transformJobRecord(record) : null;
 }
 
-export async function fetchPublishedJobSlugs(): Promise<string[]> {
+export async function fetchPublishedJobSlugs(
+  options?: SupabaseRequestOptions,
+): Promise<string[]> {
   const records = await supabaseFetch<Array<Pick<JobRecord, "slug">>>(
-    "jobs?select=slug&job_status=eq.published",
+    "jobs?select=slug",
+    undefined,
+    options,
   );
   return records
     .map((record) => record.slug)
@@ -279,6 +302,7 @@ export async function fetchPublishedJobSlugs(): Promise<string[]> {
 
 export async function fetchJobBySlugForOwner(
   slug: string,
+  options?: SupabaseRequestOptions,
 ): Promise<Job | null> {
   if (!slug) {
     return null;
@@ -286,6 +310,8 @@ export async function fetchJobBySlugForOwner(
 
   const records = await supabaseFetch<JobRecord[]>(
     `jobs?slug=eq.${encodeURIComponent(slug)}&select=*&limit=1`,
+    undefined,
+    options,
   );
 
   const record = records[0];

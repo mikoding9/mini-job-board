@@ -37,7 +37,7 @@ export default function SignUpPage() {
 
   useEffect(() => {
     if (!authState.loading && authState.user) {
-      router.replace("/");
+      router.replace("/jobs");
     }
   }, [authState, router]);
 

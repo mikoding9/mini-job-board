@@ -106,6 +106,7 @@ export default function JobEditorClient({
   const authState = useAtomValue(authStateAtom);
   const isAuthenticated = Boolean(authState.user);
   const currentUserId = authState.user?.id ?? null;
+  const accessToken = authState.session?.access_token ?? null;
   const isEditing = mode === "edit";
 
   const shouldFetch = isEditing && slug;
@@ -115,8 +116,11 @@ export default function JobEditorClient({
     isLoading,
     mutate,
   } = useSWR<Job | null>(
-    shouldFetch ? ["job-owner", slug] : null,
-    async () => fetchJobBySlugForOwner(slug!),
+    shouldFetch ? ["job-owner", slug, accessToken ? "auth" : "anon"] : null,
+    async () =>
+      fetchJobBySlugForOwner(slug!, {
+        accessToken: accessToken ?? undefined,
+      }),
     {
       revalidateOnFocus: false,
       fallbackData: isEditing ? initialJob : null,

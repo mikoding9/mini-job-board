@@ -35,7 +35,7 @@ export default function SignInPage() {
 
   useEffect(() => {
     if (!authState.loading && authState.user) {
-      router.replace("/");
+      router.replace("/jobs");
     }
   }, [authState, router]);
 
@@ -77,7 +77,7 @@ export default function SignInPage() {
         description: "Signed in successfully.",
       });
       setIsSubmitting(false);
-      router.replace("/");
+      router.replace("/jobs");
     } catch (error) {
       showErrorToast({
         title: "Sign in failed",

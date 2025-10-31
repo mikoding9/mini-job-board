@@ -11,7 +11,6 @@ import {
   CardBody,
   CardFooter,
   CardHeader,
-  Checkbox,
   Chip,
   Link,
   Navbar,
@@ -21,24 +20,16 @@ import {
   Pagination,
   Select,
   SelectItem,
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
 } from "@heroui/react";
 import {
   FiArrowRight,
   FiBriefcase,
-  FiEdit3,
   FiFilter,
   FiLayers,
   FiLogIn,
   FiLogOut,
   FiMapPin,
   FiPlus,
-  FiTrash2,
-  FiUserCheck,
   FiUserPlus,
   FiClock,
 } from "react-icons/fi";
@@ -50,8 +41,6 @@ import {
 import { supabaseClient } from "@/lib/supabase-client";
 import { authStateAtom } from "@/atoms/auth";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
-import type { Job } from "@/types/jobs";
-import { deleteJob } from "@/lib/job-mutations";
 
 const toSelectedKeys = (value: string): Selection => new Set([value]);
 const getValueFromSelection = (keys: Selection): string => {
@@ -67,22 +56,16 @@ const PAGE_SIZE = 5;
 export default function Home() {
   const authState = useAtomValue(authStateAtom);
   const isAuthenticated = Boolean(authState.user);
-  const currentUserId = authState.user?.id ?? null;
   const [locationKeys, setLocationKeys] = useState<Selection>(
     toSelectedKeys("all"),
   );
   const [jobTypeKeys, setJobTypeKeys] = useState<Selection>(
     toSelectedKeys("all"),
   );
-  const [showMineOnly, setShowMineOnly] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
-  const [jobPendingDeletion, setJobPendingDeletion] = useState<Job | null>(
-    null,
-  );
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const accessToken = authState.session?.access_token ?? null;
   const selectedLocation = useMemo(
     () => getValueFromSelection(locationKeys),
     [locationKeys],
@@ -92,44 +75,51 @@ export default function Home() {
     [jobTypeKeys],
   );
 
-  const heroChipLabel = isAuthenticated ? "Built for hiring teams" : "For job seekers";
-  const heroTitle = isAuthenticated
-    ? "Reach engaged candidates faster"
-    : "Discover your next opportunity";
-  const heroSubtitle = isAuthenticated
-    ? "Publish roles in minutes and showcase them to a community of product builders ready to collaborate."
-    : "Browse curated listings from product-minded teams and uncover a role that matches your craft.";
-  const filterHeading = isAuthenticated ? "Preview live listings" : "Tailor your search";
-  const filterDescription = isAuthenticated
-    ? "Filter by location or role type to see how candidates experience the board."
-    : "Fine-tune the board by city or role type to surface the openings that fit you best.";
-  const postLinkLabel = isAuthenticated ? "Post a new role" : "Post a role (free for teams)";
+  const heroChipLabel = "For job seekers";
+  const heroTitle = "Discover your next opportunity";
+  const heroSubtitle =
+    "Browse curated listings from product-minded teams and uncover a role that matches your craft.";
+  const filterHeading = "Tailor your search";
+  const filterDescription =
+    "Fine-tune the board by city or role type to surface the openings that fit you best.";
+  const postLinkLabel = isAuthenticated
+    ? "Manage your listings"
+    : "Post a role (free for teams)";
+  const postLinkHref = isAuthenticated ? "/jobs" : "/sign-up";
+  const PostLinkIcon = isAuthenticated ? FiBriefcase : FiPlus;
 
-  const posterIdFilter = showMineOnly && currentUserId ? currentUserId : null;
   const locationFilter = selectedLocation === "all" ? null : selectedLocation;
   const jobTypeFilter = selectedJobType === "all" ? null : selectedJobType;
 
-  const {
-    data: jobPage,
-    error,
-    isLoading,
-    mutate: mutateJobs,
-  } = useSWR<PublishedJobsPageResult>(
-    [
-      "jobs/published",
-      currentPage,
-      locationFilter,
-      jobTypeFilter,
-      posterIdFilter,
-    ],
-    ([, page, location, jobType, posterId]) =>
+  type PublishedJobsKey = [
+    "jobs/published",
+    number,
+    string | null,
+    string | null,
+    "auth" | "anon",
+  ];
+
+  const fetchPublishedJobs = useCallback(
+    ([, page, location, jobType]: PublishedJobsKey) =>
       fetchPublishedJobsPage({
         page,
         pageSize: PAGE_SIZE,
         location: location ?? undefined,
         jobType: jobType ?? undefined,
-        posterId: posterId ?? undefined,
+        accessToken: accessToken ?? undefined,
       }),
+    [accessToken],
+  );
+
+  const { data: jobPage, error, isLoading } = useSWR<PublishedJobsPageResult>(
+    [
+      "jobs/published",
+      currentPage,
+      locationFilter,
+      jobTypeFilter,
+      accessToken ? "auth" : "anon",
+    ],
+    fetchPublishedJobs,
     {
       keepPreviousData: true,
       revalidateOnFocus: false,
@@ -137,21 +127,18 @@ export default function Home() {
   );
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setShowMineOnly(false);
-    }
-  }, [isAuthenticated]);
-
-  useEffect(() => {
     setCurrentPage(1);
-  }, [selectedLocation, selectedJobType, showMineOnly]);
+  }, [selectedLocation, selectedJobType]);
 
-  const { data: filterOptions, mutate: mutateFilters } = useSWR(
-    ["jobs/published/filters", posterIdFilter],
-    ([, posterId]) =>
-      fetchPublishedJobFilters({
-        posterId: posterId ?? undefined,
-      }),
+  const fetchPublishedJobFiltersFetcher = useCallback(() => {
+    return fetchPublishedJobFilters({
+      accessToken: accessToken ?? undefined,
+    });
+  }, [accessToken]);
+
+  const { data: filterOptions } = useSWR(
+    ["jobs/published/filters", accessToken ? "auth" : "anon"],
+    fetchPublishedJobFiltersFetcher,
     {
       revalidateOnFocus: false,
     },
@@ -204,49 +191,6 @@ export default function Home() {
     }
   }, []);
 
-  const requestRemoveListing = useCallback((job: Job) => {
-    setJobPendingDeletion(job);
-    setIsDeleteDialogOpen(true);
-  }, []);
-
-  const confirmRemoveListing = useCallback(async () => {
-    if (!jobPendingDeletion) {
-      return;
-    }
-
-    const jobToDelete = jobPendingDeletion;
-    setDeletingJobId(jobToDelete.id);
-
-    try {
-      await deleteJob(jobToDelete.id);
-      await mutateJobs();
-      await mutateFilters();
-
-      showSuccessToast({
-        title: "Listing removed",
-        description: "The job is no longer visible to candidates.",
-      });
-    } catch (removeError) {
-      showErrorToast({
-        title: "Unable to remove listing",
-        description:
-          removeError instanceof Error
-            ? removeError.message
-            : "Please try again.",
-      });
-    } finally {
-      setDeletingJobId(null);
-      setJobPendingDeletion(null);
-    }
-  }, [jobPendingDeletion, mutateJobs, mutateFilters]);
-
-  const handleDeleteDialogChange = useCallback((isOpen: boolean) => {
-    setIsDeleteDialogOpen(isOpen);
-    if (!isOpen) {
-      setJobPendingDeletion(null);
-    }
-  }, []);
-
   const totalJobs = jobPage?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalJobs / PAGE_SIZE));
 
@@ -259,23 +203,16 @@ export default function Home() {
   const paginatedJobs = jobPage?.jobs ?? [];
 
   const openRolesCount = totalJobs;
-  const openRolesHeading = isAuthenticated
-    ? `${openRolesCount} open ${openRolesCount === 1 ? "role" : "roles"}`
-    : `Explore ${openRolesCount} open ${
-        openRolesCount === 1 ? "role" : "roles"
-      }`;
+  const openRolesHeading = `Explore ${openRolesCount} open ${
+    openRolesCount === 1 ? "role" : "roles"
+  }`;
   const showEmptyState = !isLoading && !error && totalJobs === 0;
   const emptyStateMessage =
-    showMineOnly && isAuthenticated
-      ? "You haven't published any listings yet. Post your first role to see it here."
-      : isAuthenticated
-        ? "No roles match your filters right now. Adjust filters or add a fresh posting to reach new candidates."
-        : "No roles match your filters right now. Adjust filters or check back soon.";
+    "No roles match your filters right now. Adjust filters or check back soon.";
 
   const resetFilters = () => {
     setLocationKeys(toSelectedKeys("all"));
     setJobTypeKeys(toSelectedKeys("all"));
-    setShowMineOnly(false);
   };
 
   return (
@@ -296,16 +233,16 @@ export default function Home() {
               <NavbarItem>
                 <Button
                   as={NextLink}
-                  href="/jobs/new"
-                  color="primary"
-                  startContent={<FiPlus className="h-4 w-4" aria-hidden />}
+                  href="/jobs"
+                  variant="light"
+                  startContent={<FiBriefcase className="h-4 w-4" aria-hidden />}
                 >
-                  Post a role
+                  Manage jobs
                 </Button>
               </NavbarItem>
               <NavbarItem>
                 <Button
-                  variant="light"
+                  color="primary"
                   onPress={handleSignOut}
                   isDisabled={isSigningOut}
                   isLoading={isSigningOut}
@@ -387,21 +324,6 @@ export default function Home() {
             )}
           </CardHeader>
           <CardBody className="space-y-4">
-            {isAuthenticated && (
-              <div className="flex justify-between">
-                <Checkbox
-                  size="sm"
-                  className="text-sm text-zinc-600 dark:text-zinc-300"
-                  isSelected={showMineOnly}
-                  onValueChange={setShowMineOnly}
-                >
-                  <span className="flex items-center gap-2">
-                    <FiUserCheck className="h-4 w-4" aria-hidden />
-                    Show only my listings
-                  </span>
-                </Checkbox>
-              </div>
-            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <Select
                 label="Location"
@@ -438,11 +360,11 @@ export default function Home() {
             </h2>
             <Link
               as={NextLink}
-              href={isAuthenticated ? "/jobs/new" : "/sign-up"}
+              href={postLinkHref}
               color="primary"
               className="flex items-center gap-2 text-sm"
             >
-              <FiPlus className="h-4 w-4" aria-hidden />
+              <PostLinkIcon className="h-4 w-4" aria-hidden />
               {postLinkLabel}
             </Link>
           </div>
@@ -535,34 +457,6 @@ export default function Home() {
                   >
                     View details
                   </Button>
-                  {isAuthenticated && job.posterId === currentUserId && (
-                    <div className="flex gap-2">
-                      <Button
-                        as={NextLink}
-                        href={`/jobs/${job.slug}/edit`}
-                        variant="light"
-                        size="sm"
-                        startContent={
-                          <FiEdit3 className="h-4 w-4" aria-hidden />
-                        }
-                      >
-                        Edit listing
-                      </Button>
-                      <Button
-                        color="danger"
-                        variant="bordered"
-                        size="sm"
-                        onPress={() => requestRemoveListing(job)}
-                        isDisabled={deletingJobId === job.id}
-                        isLoading={deletingJobId === job.id}
-                        startContent={
-                          <FiTrash2 className="h-4 w-4" aria-hidden />
-                        }
-                      >
-                        Remove listing
-                      </Button>
-                    </div>
-                  )}
                 </CardFooter>
               </Card>
             ))}
@@ -579,47 +473,6 @@ export default function Home() {
           )}
         </section>
       </main>
-      <Modal
-        isOpen={isDeleteDialogOpen}
-        onOpenChange={handleDeleteDialogChange}
-        placement="center"
-      >
-        <ModalContent>
-          {(onClose) => (
-            <>
-              <ModalHeader className="flex flex-col gap-1">
-                Remove listing?
-              </ModalHeader>
-              <ModalBody>
-                <p>
-                  {jobPendingDeletion
-                    ? `Remove "${jobPendingDeletion.title}" permanently? This action cannot be undone.`
-                    : "Remove this listing permanently? This action cannot be undone."}
-                </p>
-              </ModalBody>
-              <ModalFooter>
-                <Button variant="light" onPress={onClose}>
-                  Cancel
-                </Button>
-                <Button
-                  color="danger"
-                  onPress={() => {
-                    void confirmRemoveListing();
-                    onClose();
-                  }}
-                  isLoading={
-                    jobPendingDeletion
-                      ? deletingJobId === jobPendingDeletion.id
-                      : false
-                  }
-                >
-                  Delete listing
-                </Button>
-              </ModalFooter>
-            </>
-          )}
-        </ModalContent>
-      </Modal>
     </div>
   );
 }
