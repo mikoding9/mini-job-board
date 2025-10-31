@@ -58,9 +58,6 @@ export default function SignInPage() {
       const { error } = await supabaseClient.auth.signInWithPassword({
         email: trimmedEmail,
         password,
-        options: {
-          shouldCreateUser: false,
-        },
       });
 
       if (error) {

@@ -1,4 +1,4 @@
-import type { Job, JobRecord } from "@/types/jobs";
+import type { Job, JobRecord, JobType } from "@/types/jobs";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_PROJECT_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_API_KEY;
@@ -262,7 +262,7 @@ export async function fetchPublishedJobFilters(params?: {
     new Set(
       records
         .map((record) => record.job_type)
-        .filter((value): value is string => Boolean(value)),
+        .filter((value): value is JobType => Boolean(value)),
     ),
   ).sort((a, b) => a.localeCompare(b));
 
@@ -297,7 +297,10 @@ export async function fetchPublishedJobSlugs(
   );
   return records
     .map((record) => record.slug)
-    .filter((slug): slug is string => typeof slug === "string" && slug.length);
+    .filter(
+      (slug): slug is string =>
+        typeof slug === "string" && slug.length > 0,
+    );
 }
 
 export async function fetchJobBySlugForOwner(

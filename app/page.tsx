@@ -152,6 +152,28 @@ export default function Home() {
     return filterOptions?.jobTypes ?? [];
   }, [filterOptions]);
 
+  const locationItems = useMemo(
+    () => [
+      { key: "all", label: "All locations" },
+      ...jobLocations.map((location) => ({
+        key: location,
+        label: location,
+      })),
+    ],
+    [jobLocations],
+  );
+
+  const jobTypeItems = useMemo(
+    () => [
+      { key: "all", label: "All job types" },
+      ...jobTypes.map((jobType) => ({
+        key: jobType,
+        label: jobType,
+      })),
+    ],
+    [jobTypes],
+  );
+
   useEffect(() => {
     if (
       selectedLocation !== "all" &&
@@ -331,11 +353,13 @@ export default function Home() {
                 selectedKeys={locationKeys}
                 onSelectionChange={setLocationKeys}
                 selectionMode="single"
+                items={locationItems}
               >
-                <SelectItem key="all">All locations</SelectItem>
-                {jobLocations.map((location) => (
-                  <SelectItem key={location}>{location}</SelectItem>
-                ))}
+                {(item) => (
+                  <SelectItem key={item.key} textValue={item.label}>
+                    {item.label}
+                  </SelectItem>
+                )}
               </Select>
               <Select
                 label="Job type"
@@ -343,11 +367,13 @@ export default function Home() {
                 selectedKeys={jobTypeKeys}
                 onSelectionChange={setJobTypeKeys}
                 selectionMode="single"
+                items={jobTypeItems}
               >
-                <SelectItem key="all">All job types</SelectItem>
-                {jobTypes.map((jobType) => (
-                  <SelectItem key={jobType}>{jobType}</SelectItem>
-                ))}
+                {(item) => (
+                  <SelectItem key={item.key} textValue={item.label}>
+                    {item.label}
+                  </SelectItem>
+                )}
               </Select>
             </div>
           </CardBody>
