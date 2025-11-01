@@ -34,3 +34,9 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## What would you improve if given more time?
+
+- Deepen code quality with stricter linting, shared UI primitives, and domain-driven modules to keep new features consistent and maintainable.
+- Polish usability through guided onboarding, clearer error/empty states, and responsive tweaks that help hiring managers and applicants stay oriented.
+- Grow full-stack capabilities by adding secure job editing flows, richer applicant interactions, and Supabase row-level policies that back up the UX.
